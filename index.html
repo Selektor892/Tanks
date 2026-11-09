@@ -76,6 +76,24 @@ body.touch .tbtn{display:block}
 body.touch:not(.gyro) #centerBtn{display:none}
 body.gyro #mineBtn{width:48px;height:48px;font-size:10px;opacity:.7}
 :fullscreen{background:var(--desk)}
+/* schermo intero "di pagina": funziona anche dove il browser non concede il Fullscreen API (iPhone) */
+.overlay{overflow-y:auto;align-items:safe center}
+@media (max-height:520px){
+  .overlay{padding:8px}
+  .card{padding:12px 16px;gap:6px;max-width:520px;transform:none}
+  .card h2{font-size:22px}
+  .card p{font-size:13px;line-height:1.4}
+  .btn{padding:8px 14px;font-size:14px}
+}
+body.full{overflow:hidden}
+body.full .stage{position:fixed;inset:0;z-index:50;width:auto;max-width:none;aspect-ratio:auto;border-radius:0;box-shadow:none;
+  background:var(--desk);display:flex;align-items:center;justify-content:center;
+  padding:env(safe-area-inset-top,0px) env(safe-area-inset-right,0px) env(safe-area-inset-bottom,0px) env(safe-area-inset-left,0px)}
+body.full canvas#game{width:min(100%, calc((100dvh - env(safe-area-inset-top,0px) - env(safe-area-inset-bottom,0px)) * 1.5));height:auto;aspect-ratio:3/2}
+body.full #pauseBtn{right:calc(10px + env(safe-area-inset-right,0px));top:calc(10px + env(safe-area-inset-top,0px))}
+body.full #centerBtn{left:calc(10px + env(safe-area-inset-left,0px));top:calc(10px + env(safe-area-inset-top,0px))}
+body.touch .kb{display:none}
+body.gyro .sticks{display:none}
 .rotate{display:none;margin:0;padding:10px 14px;border-radius:4px;background:var(--desk-2);color:var(--label);font-size:14px}
 @media (pointer:coarse) and (orientation:portrait){ .rotate{display:block} }
 @media (pointer:coarse) and (orientation:landscape){
@@ -112,6 +130,7 @@ body.gyro #mineBtn{width:48px;height:48px;font-size:10px;opacity:.7}
 
   <section class="notes">
     <div>
+      <div class="kb">
       <h3>Comandi</h3>
       <dl class="keys">
         <dt>W A S D / frecce</dt><dd>Muovi il carro</dd>
@@ -120,12 +139,16 @@ body.gyro #mineBtn{width:48px;height:48px;font-size:10px;opacity:.7}
         <dt>Spazio / clic destro</dt><dd>Posa una mina (max 2)</dd>
         <dt>P / Esc</dt><dd>Pausa</dd>
       </dl>
+      </div>
+      <div class="sticks">
       <h3 style="margin-top:14px">Su telefono e tablet</h3>
       <dl class="keys">
         <dt>Pollice sinistro</dt><dd>Trascina per muovere</dd>
         <dt>Pollice destro</dt><dd>Trascina per mirare, rilascia per sparare</dd>
         <dt>Mina / Pausa</dt><dd>Pulsanti sul campo</dd>
       </dl>
+      </div>
+      <div class="gyrohelp">
       <h3 style="margin-top:14px">Con il giroscopio</h3>
       <dl class="keys">
         <dt>Inclina</dt><dd>Muovi il carro (Centra ricalibra la posizione di riposo)</dd>
@@ -133,6 +156,7 @@ body.gyro #mineBtn{width:48px;height:48px;font-size:10px;opacity:.7}
         <dt>Pollice sinistro</dt><dd>Tocca per sparare</dd>
         <dt>Spinta in basso</dt><dd>Posa una mina</dd>
       </dl>
+      </div>
       <p class="hint" style="margin-top:10px">Le mine esplodono dopo 10 secondi, se un carro ci passa sopra o se vengono colpite. Le casse di cartone saltano con le esplosioni.</p>
     </div>
     <div>
@@ -369,6 +393,7 @@ const TS = { move:null, aim:null }, STICK_R = 75; let touchMode = false;
 const MOTION = { have:false, beta:0, gamma:0, ref:null, lastJerk:0, peak:0 };
 const TILT_DEAD = 0.05, TILT_FULL = 0.27, JERK = 13;
 const gyroMode = () => touchMode && MOTION.have;
+const IOS_BROWSER = /iPhone|iPad|iPod/.test(navigator.userAgent) && !navigator.standalone;
 function upVec(beta, gamma){ const b = beta*Math.PI/180, g = gamma*Math.PI/180; return [-Math.sin(g)*Math.cos(b), Math.sin(b), Math.cos(g)*Math.cos(b)]; }
 function screenAngle(){
   let a = (screen.orientation && typeof screen.orientation.angle === "number") ? screen.orientation.angle : (window.orientation || 0);
@@ -903,6 +928,14 @@ function render(now){
   for (const b of G.bullets) drawBullet(b);
   drawParts();
   c.setTransform(dpr,0,0,dpr,0,0);
+  if (document.body.classList.contains("full")){
+    // HUD compatto sul campo quando la pagina è a schermo intero
+    const txt = `MISSIONE ${Math.min(G.level+1,LEVELS.length)}/${LEVELS.length}   VITE ${G.lives}   NEMICI ${enemies().length}`;
+    c.font = "600 15px 'IBM Plex Mono', monospace"; c.textAlign = "center"; c.textBaseline = "top";
+    const w = c.measureText(txt).width + 24;
+    c.fillStyle = "rgba(241,236,220,.8)"; rr(c, W/2-w/2, 10, w, 26, 13); c.fill();
+    c.fillStyle = "#2b2621"; c.fillText(txt, W/2, 15);
+  }
   drawCursor();
 }
 
@@ -923,10 +956,12 @@ function showOverlay(kind){
   overlay.hidden = false;
   let h = "";
   if (kind === "title") h = `<div class="card"><p class="eyebrow">8 missioni · 5 tipi di carro nemico</p><h2>Scendi in campo, comandante.</h2>
-    <p>${gyroMode() ? "Inclina il telefono per muoverti, trascina il pollice destro per spostare il mirino, tocca a sinistra per sparare. Una spinta secca verso il basso posa una mina." : touchMode ? "Pollice sinistro per muoverti, pollice destro per mirare: rilascia per sparare." : "Muoviti con WASD, mira col mouse, spara col clic."} I colpi rimbalzano sui blocchi di legno: usali per colpire dietro gli angoli.</p>
+    <p>${touchMode ? "Inclina il telefono per muoverti, trascina il pollice destro per spostare il mirino, tocca a sinistra per sparare. Una spinta secca verso il basso posa una mina." : "Muoviti con WASD, mira col mouse, spara col clic."} I colpi rimbalzano sui blocchi di legno: usali per colpire dietro gli angoli.</p>
+    ${touchMode ? `<p style="font-size:13px">Tieni il telefono in orizzontale come per giocare: la posizione di partenza conta come "fermo".${IOS_BROWSER ? " Per togliere anche le barre di Safari: Condividi, poi Aggiungi alla schermata Home." : ""}</p>` : ""}
     <button class="btn" id="go">Inizia la missione 1</button></div>`;
   else if (kind === "intro"){ const L = LEVELS[G.level];
-    h = `<div class="card"><p class="eyebrow">Missione ${G.level+1} di ${LEVELS.length} · vite ${G.lives}</p><h2>${L.name}</h2><div class="foes">${foeChips(enemies())}</div></div>`; }
+    h = `<div class="card"><p class="eyebrow">Missione ${G.level+1} di ${LEVELS.length} · vite ${G.lives}</p><h2>${L.name}</h2><div class="foes">${foeChips(enemies())}</div>${
+      gyroMode() ? `<p style="font-size:13px">Tieni il telefono fermo: sto calibrando l'inclinazione.</p>` : touchMode ? `<p style="font-size:13px">Sensori non disponibili: pollice sinistro per muoverti, pollice destro per mirare e rilascia per sparare.</p>` : ""}</div>`; }
   else if (kind === "clear") h = `<div class="card"><p class="eyebrow">Missione ${G.level+1} completata</p><h2>Settore ripulito</h2>${(G.level+1)%3===0 && G.level+1<LEVELS.length ? "<p>Vita extra guadagnata.</p>" : ""}</div>`;
   else if (kind === "pause") h = `<div class="card"><p class="eyebrow">Pausa</p><h2>Cessate il fuoco</h2><button class="btn" id="go">Riprendi</button></div>`;
   else if (kind === "over") h = `<div class="card"><p class="eyebrow">Partita finita</p><h2>Carro fuori combattimento</h2><p>Missione raggiunta: ${G.level+1} di ${LEVELS.length}. Nemici abbattuti: ${G.kills}.</p><button class="btn" id="go">Ricomincia</button></div>`;
@@ -939,7 +974,7 @@ function startGame(){ G.level = 0; G.lives = 3; G.kills = 0; G.killed = new Set(
 function startLevel(){ loadLevel(); G.state = "intro"; G.timer = 2.2; showOverlay("intro"); }
 function primary(){
   audioInit();
-  if (touchMode){ askMotion(); goFullscreen(); }
+  if (touchMode){ askMotion(); goFullscreen(); document.body.classList.add("full"); scrollTo(0,0); }
   if (G.state === "title" || G.state === "over" || G.state === "win") startGame();
   else if (G.state === "paused") { G.state = "play"; hideOverlay(); }
 }

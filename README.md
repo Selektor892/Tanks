@@ -2,7 +2,7 @@
 
 Gioco di carri armati in miniatura visto dall'alto: 8 missioni, colpi che rimbalzano, mine e 5 tipi di carri nemici.
 
-Si gioca nel browser: https://selektor892.github.io/tanks/
+Si gioca nel browser: https://selektor892.github.io/Tanks/
 
 ## Comandi
 
