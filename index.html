@@ -50,6 +50,11 @@ canvas#game{display:block;width:100%;height:100%;cursor:none;outline:none}
 .btn{align-self:flex-start;font-family:var(--display);font-size:16px;letter-spacing:.04em;background:var(--accent);color:#fff;border:0;border-radius:3px;padding:10px 18px;cursor:pointer;box-shadow:0 3px 0 #9c4520}
 .btn:hover{filter:brightness(1.07)}
 .btn:focus-visible{outline:3px solid var(--ink);outline-offset:2px}
+.opts{display:flex;flex-wrap:wrap;gap:6px}
+.opt{font-family:var(--mono);font-size:12px;font-weight:600;letter-spacing:.03em;background:transparent;color:var(--ink);border:2px solid var(--ink-soft);border-radius:99px;padding:5px 11px;cursor:pointer;touch-action:manipulation}
+.opt[aria-pressed="true"]{background:var(--ink);color:var(--paper);border-color:var(--ink)}
+.opt:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.say{font-family:var(--display);font-size:clamp(34px,8vw,56px);color:var(--accent);margin:0;line-height:1}
 .notes{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.4fr);gap:24px}
 @media (max-width:720px){.notes{grid-template-columns:minmax(0,1fr)}}
 .notes h3{font-family:var(--mono);font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--fg-dim);margin:0 0 8px;font-weight:600}
@@ -156,6 +161,7 @@ body.gyro .sticks{display:none}
         <dt>Pollice sinistro</dt><dd>Tocca per sparare</dd>
         <dt>Spinta in basso</dt><dd>Posa una mina</dd>
       </dl>
+      <p class="hint" style="margin-top:8px">Nella schermata iniziale puoi invertire i ruoli (inclina per mirare, pollice sinistro per guidare, tocco a destra per sparare) e attivare la voce: PEW spara, BOOM posa una mina.</p>
       </div>
       <p class="hint" style="margin-top:10px">Le mine esplodono dopo 10 secondi, se un carro ci passa sopra o se vengono colpite. Le casse di cartone saltano con le esplosioni.</p>
     </div>
@@ -409,11 +415,13 @@ const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
 let AC = null;
 function audioInit(){ if (!AC) { try { AC = new (window.AudioContext||window.webkitAudioContext)(); } catch(e) {} } if (AC && AC.state === "suspended") AC.resume(); }
 function tone(freq, dur, type="square", vol=0.06, slide=0){
+  if (typeof VOICE !== "undefined") VOICE.lastSfx = performance.now() + dur*1000;
   if (!AC) return; const t = AC.currentTime, o = AC.createOscillator(), g = AC.createGain();
   o.type = type; o.frequency.setValueAtTime(freq,t); if (slide) o.frequency.exponentialRampToValueAtTime(Math.max(30,freq+slide), t+dur);
   g.gain.setValueAtTime(vol,t); g.gain.exponentialRampToValueAtTime(0.0001,t+dur); o.connect(g).connect(AC.destination); o.start(t); o.stop(t+dur);
 }
 function noise(dur, vol=0.25, lp=900){
+  if (typeof VOICE !== "undefined") VOICE.lastSfx = performance.now() + dur*1000;
   if (!AC) return; const t = AC.currentTime, n = Math.floor(AC.sampleRate*dur), buf = AC.createBuffer(1,n,AC.sampleRate), d = buf.getChannelData(0);
   for (let i=0;i<n;i++) d[i] = (Math.random()*2-1)*(1-i/n)**2;
   const s = AC.createBufferSource(), f = AC.createBiquadFilter(), g = AC.createGain();
@@ -462,6 +470,61 @@ const MOTION = { have:false, beta:0, gamma:0, ref:null, lastJerk:0, peak:0 };
 const TILT_DEAD = 0.05, TILT_FULL = 0.27, JERK = 13;
 const gyroMode = () => touchMode && MOTION.have;
 const IOS_BROWSER = /iPhone|iPad|iPod/.test(navigator.userAgent) && !navigator.standalone;
+// preferenze per questo dispositivo
+const PREFS = (() => { const d = { scheme:"tiltMove", voice:false, voiceThr:1100, voiceGate:0 };
+  try { return Object.assign(d, JSON.parse(localStorage.getItem("cingolini-prefs") || "{}")); } catch(e){ return d; } })();
+function savePrefs(){ try { localStorage.setItem("cingolini-prefs", JSON.stringify(PREFS)); } catch(e){} }
+const tiltAim = () => gyroMode() && PREFS.scheme === "tiltAim";
+
+// ---------------------------------------------------------------- comandi vocali
+// Nessun riconoscimento di parole: si guarda il suono. Un colpo breve e acuto ("PEW") spara,
+// uno cupo ("BOOM") posa una mina. Decide il baricentro dello spettro nei primi ~110 ms.
+const VOICE = { on:false, stream:null, an:null, buf:null, floor:1e-8, state:"idle", t0:0, cSum:0, wSum:0, peak:0, refr:0, lastSfx:0, cal:null, err:"", flash:0, flashKind:"" };
+async function startVoice(){
+  audioInit();
+  if (!AC || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) throw new Error("nomic");
+  const st = await navigator.mediaDevices.getUserMedia({ audio:{ echoCancellation:true, noiseSuppression:false, autoGainControl:false } });
+  if (AC.state === "suspended") await AC.resume();
+  const src = AC.createMediaStreamSource(st), an = AC.createAnalyser();
+  an.fftSize = 1024; an.smoothingTimeConstant = 0; src.connect(an);
+  VOICE.stream = st; VOICE.an = an; VOICE.buf = new Float32Array(an.frequencyBinCount); VOICE.on = true; VOICE.err = "";
+}
+function stopVoice(){ try { VOICE.stream && VOICE.stream.getTracks().forEach(t => t.stop()); } catch(e){} VOICE.on = false; VOICE.an = null; VOICE.stream = null; }
+function voiceTick(now){
+  if (!VOICE.on || !VOICE.an) return;
+  VOICE.an.getFloatFrequencyData(VOICE.buf);
+  const hz = AC.sampleRate / VOICE.an.fftSize, i0 = Math.max(1, Math.floor(90/hz)), i1 = Math.min(VOICE.buf.length, Math.floor(7000/hz));
+  let e = 0, c = 0;
+  for (let i=i0;i<i1;i++){ const pw = Math.pow(10, VOICE.buf[i]/10); e += pw; c += pw*i*hz; }
+  const cen = e > 0 ? c/e : 0;
+  if (VOICE.state === "idle"){
+    if (now < VOICE.refr) return;
+    const gate = VOICE.cal ? 0 : PREFS.voiceGate;
+    if (e > VOICE.floor*14 && e > Math.max(gate, 1e-7) && now - VOICE.lastSfx > 160){
+      VOICE.state = "cap"; VOICE.t0 = now; VOICE.cSum = cen*e; VOICE.wSum = e; VOICE.peak = e;
+    } else VOICE.floor = VOICE.floor*0.97 + Math.max(e,1e-12)*0.03;
+  } else {
+    VOICE.cSum += cen*e; VOICE.wSum += e; VOICE.peak = Math.max(VOICE.peak, e);
+    if (now - VOICE.t0 > 110){ VOICE.state = "idle"; VOICE.refr = now + 280; voiceHit(VOICE.cSum/VOICE.wSum, VOICE.peak); }
+  }
+}
+const CAL_STEPS = ["PEW","PEW","BOOM","BOOM"];
+function voiceHit(cen, peak){
+  if (VOICE.cal){
+    VOICE.cal.vals.push(cen); VOICE.cal.peaks.push(peak);
+    if (VOICE.cal.vals.length >= CAL_STEPS.length){
+      const v = VOICE.cal.vals, pew = (v[0]+v[1])/2, boom = (v[2]+v[3])/2;
+      VOICE.cal.ok = pew > boom*1.15;
+      if (VOICE.cal.ok){ PREFS.voiceThr = Math.sqrt(pew*boom); PREFS.voiceGate = Math.min(...VOICE.cal.peaks)*0.15; savePrefs(); }
+      VOICE.cal.done = true;
+    }
+    showOverlay("voice"); return;
+  }
+  if (G.state !== "play" || !G.player || !G.player.alive) return;
+  const pew = cen > PREFS.voiceThr;
+  if (pew) keys.wantFire = true; else keys.wantMine = true;
+  VOICE.flash = 0.35; VOICE.flashKind = pew ? "PEW" : "BOOM";
+}
 function upVec(beta, gamma){ const b = beta*Math.PI/180, g = gamma*Math.PI/180; return [-Math.sin(g)*Math.cos(b), Math.sin(b), Math.cos(g)*Math.cos(b)]; }
 function screenAngle(){
   let a = (screen.orientation && typeof screen.orientation.angle === "number") ? screen.orientation.angle : (window.orientation || 0);
@@ -807,7 +870,7 @@ function updatePlayer(p, dt){
   let my = (keys.KeyS||keys.ArrowDown?1:0) - (keys.KeyW||keys.ArrowUp?1:0);
   let mag = 1;
   const sm = TS.move;
-  if (gyroMode()){ const t = tiltVector(); if (t[2] > 0){ mx = t[0]; my = t[1]; mag = t[2]; } }
+  if (gyroMode() && !tiltAim()){ const t = tiltVector(); if (t[2] > 0){ mx = t[0]; my = t[1]; mag = t[2]; } }
   else if (sm){ const dx = sm.x-sm.ox, dy = sm.y-sm.oy, l = Math.hypot(dx,dy); if (l > 8){ mx = dx; my = dy; mag = Math.min(1, l/STICK_R); } }
   if (mx || my){
     const l = Math.hypot(mx,my); mx/=l; my/=l;
@@ -815,7 +878,8 @@ function updatePlayer(p, dt){
     moveTank(p, mx*p.T.speed*mag, my*p.T.speed*mag, dt);
   }
   const sa = TS.aim;
-  if (gyroMode()) p.turret = Math.atan2(mouse.y-p.y, mouse.x-p.x);
+  if (tiltAim()){ const t = tiltVector(); if (t[2] > 0) p.turret = turnTo(p.turret, Math.atan2(t[1],t[0]), 9*dt); }
+  else if (gyroMode()) p.turret = Math.atan2(mouse.y-p.y, mouse.x-p.x);
   else if (touchMode){
     if (sa &&Math.hypot(sa.x-sa.ox, sa.y-sa.oy) > 10) p.turret = Math.atan2(sa.y-sa.oy, sa.x-sa.ox);
   } else p.turret = Math.atan2(mouse.y-p.y, mouse.x-p.x);
@@ -960,8 +1024,8 @@ function drawParts(){
 function drawAim(){
   const p = G.player; if (!p || !p.alive || G.state !== "play") return;
   const c = ctx, a = p.turret, sx = p.x+Math.cos(a)*28, sy = p.y+Math.sin(a)*28;
-  const stick = touchMode && !gyroMode();
-  if (stick && !TS.aim) return;
+  const stick = touchMode && (!gyroMode() || tiltAim());
+  if (stick && !TS.aim && !tiltAim()) return;
   const ex = stick ? p.x+Math.cos(a)*190 : mouse.x, ey = stick ? p.y+Math.sin(a)*190 : mouse.y;
   c.save(); c.strokeStyle = stick ?"rgba(194,69,42,.55)" : "rgba(43,38,33,.32)"; c.lineWidth = 2; c.setLineDash([3,9]); c.lineCap = "round";
   c.beginPath(); c.moveTo(sx,sy); c.lineTo(ex,ey); c.stroke(); c.restore();
@@ -978,7 +1042,7 @@ function drawSticks(){
   }
 }
 function drawCursor(){
-  if (touchMode && !gyroMode()) { drawSticks(); return; }
+  if (touchMode && (!gyroMode() || tiltAim())) { drawSticks(); return; }
   const c = ctx, x = mouse.x, y = mouse.y;
   c.save(); c.strokeStyle = "#c2452a"; c.lineWidth = 2;
   c.beginPath(); c.arc(x,y,9,0,TAU); c.moveTo(x-15,y); c.lineTo(x-5,y); c.moveTo(x+5,y); c.lineTo(x+15,y); c.moveTo(x,y-15); c.lineTo(x,y-5); c.moveTo(x,y+5); c.lineTo(x,y+15); c.stroke();
@@ -1007,6 +1071,10 @@ function render(now){
     c.fillStyle = "rgba(241,236,220,.8)"; rr(c, W/2-w/2, 10, w, 26, 13); c.fill();
     c.fillStyle = "#2b2621"; c.fillText(txt, W/2, 15);
   }
+  if (VOICE.flash > 0 && G.player){
+    c.save(); c.globalAlpha = Math.min(1, VOICE.flash*4); c.font = "22px Bungee, Impact, sans-serif"; c.textAlign = "center"; c.textBaseline = "bottom";
+    c.fillStyle = VOICE.flashKind === "PEW" ? "#c2452a" : "#2b2621"; c.fillText(VOICE.flashKind, G.player.x, G.player.y - 26); c.restore();
+  }
   drawCursor();
 }
 
@@ -1027,9 +1095,17 @@ function showOverlay(kind){
   overlay.hidden = false;
   let h = "";
   if (kind === "title") h = `<div class="card"><p class="eyebrow">${LEVELS.length} missioni · 7 tipi di carro nemico</p><h2>Scendi in campo, comandante.</h2>
-    <p>${touchMode ? "Inclina il telefono per muoverti, trascina il pollice destro per spostare il mirino, tocca a sinistra per sparare. Una spinta secca verso il basso posa una mina." : "Muoviti con WASD, mira col mouse, spara col clic."} I colpi rimbalzano sui blocchi di legno: usali per colpire dietro gli angoli.</p>
+    <p>${!touchMode ? "Muoviti con WASD, mira col mouse, spara col clic." : PREFS.scheme === "tiltAim" ? "Inclina il telefono per mirare, guida col pollice sinistro, tocca a destra per sparare." : "Inclina il telefono per muoverti, trascina il pollice destro per spostare il mirino, tocca a sinistra per sparare."}${touchMode ? " Una spinta secca verso il basso posa una mina." : ""}${PREFS.voice ? " Di' PEW per sparare e BOOM per la mina." : ""} I colpi rimbalzano sui blocchi di legno: usali per colpire dietro gli angoli.</p>
     ${touchMode ? `<p style="font-size:13px">Tieni il telefono in orizzontale come per giocare: la posizione di partenza conta come "fermo".${IOS_BROWSER ? " Per togliere anche le barre di Safari: Condividi, poi Aggiungi alla schermata Home." : ""}</p>` : ""}
+    <div class="opts">${touchMode ? `<button class="opt" id="optScheme" aria-pressed="${PREFS.scheme === "tiltAim"}">Inclinazione: ${PREFS.scheme === "tiltAim" ? "mira" : "guida"}</button>` : ""}<button class="opt" id="optVoice" aria-pressed="${PREFS.voice}">Voce PEW/BOOM: ${PREFS.voice ? "sì" : "no"}</button>${PREFS.voice ? `<button class="opt" id="optCal">Tara la voce</button>` : ""}</div>
+    ${VOICE.err ? `<p style="font-size:13px;color:#a3361a">${VOICE.err}</p>` : ""}
     <div style="display:flex;flex-wrap:wrap;gap:8px"><button class="btn" id="go">Inizia la missione 1</button>${loadBest() > 0 ? `<button class="btn" id="cont" style="background:#2b2621;box-shadow:0 3px 0 #000">Continua dalla missione ${loadBest()+1}</button>` : ""}</div></div>`;
+  else if (kind === "voice"){ const c = VOICE.cal, n = c.vals.length;
+    h = c.done ? `<div class="card"><p class="eyebrow">Taratura voce</p><h2>${c.ok ? "Fatto!" : "Non distinguo i due suoni"}</h2>
+      <p>${c.ok ? "Ora PEW spara e BOOM posa una mina. Puoi ripetere la taratura quando vuoi." : "PEW e BOOM mi sono sembrati troppo simili. Prova a dire PEW più secco e acuto, e BOOM più lungo e grave."}</p>
+      <div style="display:flex;flex-wrap:wrap;gap:8px"><button class="btn" id="calAgain">${c.ok ? "Ripeti" : "Riprova"}</button><button class="btn" id="calDone" style="background:#2b2621;box-shadow:0 3px 0 #000">Torna al menu</button></div></div>`
+    : `<div class="card"><p class="eyebrow">Taratura voce · ${n+1} di ${CAL_STEPS.length}</p><p>Di' ad alta voce, a 20-30 cm dal telefono:</p><p class="say">${CAL_STEPS[n]}</p>
+      <button class="btn" id="calDone" style="background:#2b2621;box-shadow:0 3px 0 #000">Annulla</button></div>`; }
   else if (kind === "intro"){ const L = LEVELS[G.level];
     h = `<div class="card"><p class="eyebrow">Missione ${G.level+1} di ${LEVELS.length} · vite ${G.lives}</p><h2>${L.name}</h2><div class="foes">${foeChips(enemies())}</div>${
       gyroMode() ? `<p style="font-size:13px">Tieni il telefono fermo: sto calibrando l'inclinazione.</p>` : touchMode ? `<p style="font-size:13px">Sensori non disponibili: pollice sinistro per muoverti, pollice destro per mirare e rilascia per sparare.</p>` : ""}</div>`; }
@@ -1039,16 +1115,28 @@ function showOverlay(kind){
   else if (kind === "win") h = `<div class="card"><p class="eyebrow">Tutte le ${LEVELS.length} missioni completate</p><h2>Vittoria!</h2><p>Nemici abbattuti: ${G.kills}. Vite rimaste: ${G.lives}.</p><button class="btn" id="go">Gioca di nuovo</button></div>`;
   overlay.innerHTML = h;
   const go = $("go"); if (go) go.addEventListener("click", e => { e.stopPropagation(); primary(); });
+  const on = (id, fn) => { const el = $(id); if (el) el.addEventListener("click", e => { e.stopPropagation(); fn(); }); };
+  on("optScheme", () => { PREFS.scheme = PREFS.scheme === "tiltAim" ? "tiltMove" : "tiltAim"; savePrefs(); showOverlay("title"); });
+  on("optVoice", async () => {
+    if (PREFS.voice){ PREFS.voice = false; savePrefs(); stopVoice(); showOverlay("title"); return; }
+    try { await startVoice(); PREFS.voice = true; savePrefs(); beginVoiceCal(); }
+    catch(e){ VOICE.err = "Microfono non disponibile: serve il permesso e una pagina aperta dal sito, non da Claude."; PREFS.voice = false; savePrefs(); showOverlay("title"); }
+  });
+  on("optCal", beginVoiceCal);
+  on("calAgain", beginVoiceCal);
+  on("calDone", () => { VOICE.cal = null; showOverlay("title"); });
   const cont = $("cont"); if (cont) cont.addEventListener("click", e => { e.stopPropagation(); primary(G.state === "over" ? G.level : loadBest()); });
 }
 function hideOverlay(){ overlay.hidden = true; overlay.innerHTML = ""; cv.focus(); }
 function loadBest(){ try { return Math.max(0, Math.min(LEVELS.length-1, parseInt(localStorage.getItem("cingolini-best")||"0",10)||0)); } catch(e){ return 0; } }
 function saveBest(l){ try { if (l > loadBest()) localStorage.setItem("cingolini-best", String(l)); } catch(e){} }
+function beginVoiceCal(){ VOICE.cal = { vals:[], peaks:[] }; VOICE.state = "idle"; VOICE.refr = performance.now() + 400; showOverlay("voice"); }
 function startGame(from){ G.level = from || 0; G.lives = 3; G.kills = 0; G.killed = new Set(); startLevel(); }
 function startLevel(){ saveBest(G.level); loadLevel(); G.state = "intro"; G.timer = 2.2; showOverlay("intro"); }
 function primary(from){
   audioInit();
   if (touchMode){ askMotion(); goFullscreen(); document.body.classList.add("full"); scrollTo(0,0); }
+  if (PREFS.voice && !VOICE.on) startVoice().catch(() => { PREFS.voice = false; });
   if (G.state === "title" || G.state === "over" || G.state === "win") startGame(typeof from === "number" ? from : 0);
   else if (G.state === "paused") { G.state = "play"; hideOverlay(); }
 }
@@ -1086,6 +1174,12 @@ cv.addEventListener("touchstart", e => {
   e.preventDefault(); audioInit(); enableTouch();
   for (const t of e.changedTouches){
     const p = tpos(t), s = { id:t.identifier, ox:p.x, oy:p.y, x:p.x, y:p.y };
+    if (tiltAim()){
+      // inclinazione per mirare: pollice sinistro guida (joystick), tocco a destra spara
+      if (p.x < W/2){ if (!TS.move) TS.move = s; }
+      else if (G.state === "play") keys.wantFire = true;
+      continue;
+    }
     if (gyroMode()){
       // giroscopio: pollice sinistro spara, pollice destro muove il mirino come un trackpad
       if (p.x < W/2){ if (G.state === "play") keys.wantFire = true; }
@@ -1102,7 +1196,7 @@ cv.addEventListener("touchmove", e => {
     for (const s of [TS.move, TS.aim]){
       if (!s || s.id !== t.identifier) continue;
       const p = tpos(t);
-      if (gyroMode()){
+      if (gyroMode() && !tiltAim()){
         mouse.x = Math.max(0, Math.min(W, mouse.x + (p.x-s.x)*1.7));
         mouse.y = Math.max(0, Math.min(H, mouse.y + (p.y-s.y)*1.7));
         s.x = p.x; s.y = p.y; continue;
@@ -1150,6 +1244,8 @@ G.level = 0; loadLevel(); G.state = "title"; showOverlay("title");
 let last = performance.now();
 function frame(now){
   const dt = Math.min(1/30, (now-last)/1000); last = now;
+  voiceTick(now);
+  if (VOICE.flash > 0) VOICE.flash -= dt;
   if (G.state !== "paused" && G.state !== "title") update(dt);
   render(now/1000);
   requestAnimationFrame(frame);
