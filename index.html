@@ -113,7 +113,7 @@ body.gyro .sticks{display:none}
   </header>
 
   <div class="hud" aria-live="polite">
-    <span>Missione <b id="hMission">1/8</b></span>
+    <span>Missione <b id="hMission">1/80</b></span>
     <span class="lives">Vite <b id="hLives">■■■</b></span>
     <span>Nemici <b id="hFoes">0</b></span>
     <span>Abbattuti <b id="hKills">0</b></span>
@@ -184,6 +184,10 @@ const TYPES = {
        speed:70, bulletSpeed:400, bounces:0, maxB:2, cd:1.3, turn:2.6, aimB:0, err:0.03, mines:0 },
   t: { name:"Talpa", desc:"Velocissima, semina mine.", color:"#8a5a9e", dark:"#4f2f5d",
        speed:115, bulletSpeed:200, bounces:1, maxB:1, cd:2.4, turn:2.4, aimB:1, err:0.04, mines:2 },
+  c: { name:"Corazza", desc:"Blindato: servono due colpi. Spara razzi.", color:"#5b6b3a", dark:"#2f3a1a",
+       speed:40, bulletSpeed:330, bounces:1, maxB:1, cd:1.6, turn:2.0, aimB:1, err:0.02, mines:0, hp:2 },
+  v: { name:"Vespa", desc:"Rapida, raffiche di tre colpi.", color:"#e0b31f", dark:"#7a5d06",
+       speed:95, bulletSpeed:230, bounces:1, maxB:3, cd:0.45, turn:3.2, aimB:0, err:0.05, mines:0 },
 };
 
 // ---------------------------------------------------------------- missioni (24x16)
@@ -327,6 +331,70 @@ const LEVELS = [
   "........................"]},
 ];
 
+// ---------------------------------------------------------------- generatore delle missioni 9-80
+// Arene simmetriche (alto/basso) da un seme fisso per missione: sempre le stesse, sempre percorribili.
+const TOTAL_LEVELS = 80;
+function mulberry(seed){ return () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+const NAME_A = ["Canyon","Corridoio","Labirinto","Piazza","Trincea","Cortile","Valico","Bastione","Crocevia","Scacchiera","Officina","Magazzino","Ponte","Recinto","Arsenale","Cantiere","Avamposto","Deposito"];
+const NAME_B = ["di cartone","delle schegge","di legno","in salita","nell'ombra","delle mine","dei rimbalzi","di frontiera","del silenzio","delle sponde","in fiamme","a specchio","del vento","di mezzanotte","tra le casse","del tempo","di ferro","degli echi"];
+function enemyPool(n){
+  const pool = [["s",3],["r",3]];
+  if (n >= 9)  pool.push(["b", 3]);
+  if (n >= 13) pool.push(["l", 3]);
+  if (n >= 18) pool.push(["t", 2]);
+  if (n >= 25) pool.push(["c", n < 35 ? 4 : 3]);
+  if (n >= 35) pool.push(["v", n < 45 ? 4 : 3]);
+  if (n >= 30) pool[0][1] = 1;
+  if (n >= 45) pool[1][1] = 1;
+  return pool;
+}
+function genLevel(n){
+  for (let attempt = 0; attempt < 60; attempt++){
+    const rnd = mulberry(n*7919 + attempt*104729), ri = (a,b) => a + Math.floor(rnd()*(b-a+1));
+    const g = Array.from({length:ROWS}, () => Array(COLS).fill("."));
+    const put = (r,c,ch) => { if (r>=0&&c>=0&&r<ROWS&&c<COLS){ g[r][c] = ch; g[ROWS-1-r][c] = ch; } };
+    const density = Math.min(0.24, 0.10 + n*0.0018);
+    const crateBias = rnd()*0.6, pitChance = n >= 12 ? 0.18 : 0;
+    let filled = 0, guard = 0;
+    while (filled < density*COLS*ROWS/2 && guard++ < 200){
+      const horiz = rnd() < 0.5, len = ri(2,6), r = ri(0,7), c = ri(3,22);
+      const roll = rnd(), ch = roll < pitChance ? "o" : roll < pitChance + crateBias*(1-pitChance) ? "x" : "#";
+      const thick = rnd() < 0.25 ? 2 : 1;
+      for (let k=0;k<len;k++) for (let w=0;w<thick;w++){
+        const r2 = horiz ? r+w : r+k, cc = horiz ? c+k : c+w;
+        if (r2 > 7 || cc >= COLS) continue;
+        if (g[r2][cc] === ".") filled++;
+        put(r2, cc, ch);
+      }
+    }
+    for (let r=5;r<=10;r++) for (let c=0;c<=4;c++) g[r][c] = ".";
+    g[7][2] = "P";
+    const count = Math.min(8, 1 + Math.floor(n/9) + (rnd() < (n%9)/9 ? 1 : 0));
+    const pool = enemyPool(n), tot = pool.reduce((a,b)=>a+b[1],0);
+    const pick = () => { let x = rnd()*tot; for (const [k,w] of pool){ x -= w; if (x <= 0) return k; } return pool[0][0]; };
+    const spots = [];
+    for (let tries = 0; spots.length < count && tries < 400; tries++){
+      const r = ri(0,ROWS-1), c = ri(Math.max(9, 16 - Math.floor(n/12)), COLS-1);
+      if (g[r][c] !== ".") continue;
+      if (spots.some(([a,b]) => Math.abs(a-r)+Math.abs(b-c) < 4)) continue;
+      spots.push([r,c]);
+    }
+    if (spots.length < count) continue;
+    for (const [r,c] of spots) g[r][c] = pick();
+    const debut = {9:"b",13:"l",18:"t",25:"c",35:"v"}[n];
+    if (debut) g[spots[0][0]][spots[0][1]] = debut;
+    const free = (r,c) => r>=0&&c>=0&&r<ROWS&&c<COLS && g[r][c] !== "#" && g[r][c] !== "x" && g[r][c] !== "o";
+    const seen = new Set(["7,2"]), q = [[7,2]];
+    while (q.length){ const [r,c] = q.shift(); for (const [dr,dc] of [[1,0],[-1,0],[0,1],[0,-1]]){ const k = (r+dr)+","+(c+dc); if (free(r+dr,c+dc) && !seen.has(k)){ seen.add(k); q.push([r+dr,c+dc]); } } }
+    if (!spots.every(([r,c]) => seen.has(r+","+c))) continue;
+    const name = NAME_A[(n*5) % NAME_A.length] + " " + NAME_B[(n*7 + Math.floor(n/NAME_A.length)) % NAME_B.length];
+    return { name, map: g.map(row => row.join("")) };
+  }
+  return LEVELS[(n-1) % 8];
+}
+for (let n = LEVELS.length + 1; n <= TOTAL_LEVELS; n++) LEVELS.push(genLevel(n));
+const levelCdMul = () => Math.max(0.65, 1 - G.level*0.0045);
+
 // ---------------------------------------------------------------- utilità
 const rand = (a,b) => a + Math.random()*(b-a);
 const TAU = Math.PI*2;
@@ -454,7 +522,7 @@ const tankBlockCell = (c,r) => (c<0||r<0||c>=COLS||r>=ROWS) ? true : G.grid[r][c
 function makeTank(type,x,y,id){
   const T = TYPES[type];
   return { type, T, id, x, y, r:15, body:0, turret:0, alive:true, isPlayer:type==="P",
-    cool: rand(0.8,1.8), aim:null, aimT:rand(0,0.3), idle:0, idleT:0, path:[], think:rand(0.3,1.2),
+    hp: T.hp || 1, hit:0, cool: rand(0.8,1.8), aim:null, aimT:rand(0,0.3), idle:0, idleT:0, path:[], think:rand(0.3,1.2),
     dodgeT:0, dvx:0, dvy:0, tread:0, trackAcc:0, mineT:rand(2.5,5), stuckT:0 };
 }
 
@@ -541,7 +609,7 @@ function stepBullet(b, dt){
 function hitTest(b){
   for (const t of G.tanks){
     if (!t.alive || (t===b.owner && b.dist < 30)) continue;
-    if (dist2(t,b) < (t.r+b.r)**2){ killTank(t); return true; }
+    if (dist2(t,b) < (t.r+b.r)**2){ if (--t.hp > 0){ t.hit = 0.3; spark(b.x,b.y); spark(b.x,b.y); SFX.bounce(); } else killTank(t); return true; }
   }
   for (const m of G.mines){ if (!m.gone && dist2(m,b) < (12+b.r)**2){ m.timer = 0; return true; } }
   return false;
@@ -659,6 +727,8 @@ function pickGoal(t){
       case "l": ok = dp>=4 && dp<=8 && d<=9; break;
       case "t": ok = d>=3 && d<=9 && dp>=4; break;
       case "b": ok = d>=1 && d<=3; break;
+      case "c": ok = d>=2 && d<=5; break;
+      case "v": ok = dp>=3 && dp<=7 && d<=8; break;
     }
     if (ok) opts.push([c,r]);
   }
@@ -695,7 +765,7 @@ function updateEnemy(t, dt){
   t.cool -= dt;
   if (t.aim !== null && t.cool <= 0 && Math.abs(wrap(t.aim - t.turret)) < 0.05 && G.bullets.filter(b=>b.alive && b.owner===t).length < T.maxB && P.alive){
     const hit = trace(t.x+Math.cos(t.turret)*26, t.y+Math.sin(t.turret)*26, t.turret, T.bounces, t);
-    if (!hit || hit === P){ fire(t); t.cool = T.cd*rand(0.85,1.2); t.aim = null; t.aimT = rand(0.2,0.4); }
+    if (!hit || hit === P){ fire(t); t.cool = T.cd*levelCdMul()*rand(0.85,1.2); t.aim = null; t.aimT = rand(0.2,0.4); }
   }
   // mine
   if (T.mines > 0){
@@ -789,7 +859,7 @@ function update(dt){
         } else {
           G.level++;
           if (G.level >= LEVELS.length){ G.state = "win"; showOverlay("win"); }
-          else { G.killed = new Set(); if (G.level % 3 === 0) G.lives++; startLevel(); }
+          else { G.killed = new Set(); if (G.level % 5 === 0) G.lives++; startLevel(); }
         }
       }
     }
@@ -802,7 +872,7 @@ function update(dt){
 }
 
 // ---------------------------------------------------------------- disegno
-function drawTank(c, x, y, body, turret, T, tread){
+function drawTank(c, x, y, body, turret, T, tread, hp){
   c.save(); c.translate(x,y);
   c.fillStyle = "rgba(50,35,20,.22)"; c.beginPath(); c.ellipse(4,6,21,18,0,0,TAU); c.fill();
   c.save(); c.rotate(body);
@@ -814,6 +884,7 @@ function drawTank(c, x, y, body, turret, T, tread){
   }
   c.fillStyle = T.color; c.strokeStyle = T.dark; c.lineWidth = 2; rr(c,-16,-10,32,20,4); c.fill(); c.stroke();
   c.fillStyle = "rgba(255,255,255,.2)"; rr(c,-13,-8,26,5,2); c.fill();
+  if ((hp ?? T.hp ?? 1) > 1){ c.strokeStyle = T.dark; c.lineWidth = 1.5; c.strokeRect(-12,-6,24,12); c.fillStyle = T.dark; for (const [px,py] of [[-10,-4],[8,-4],[-10,2],[8,2]]) c.fillRect(px,py,2,2); }
   c.fillStyle = T.dark; c.fillRect(12,-6,2,12);
   c.restore();
   c.rotate(turret);
@@ -924,7 +995,7 @@ function render(now){
   drawCells();
   for (const m of G.mines) drawMine(m, now);
   drawAim();
-  for (const t of G.tanks) if (t.alive) drawTank(c, t.x, t.y, t.body, t.turret, t.T, t.tread);
+  for (const t of G.tanks) if (t.alive) drawTank(c, t.x, t.y, t.body, t.turret, t.T, t.tread, t.hp);
   for (const b of G.bullets) drawBullet(b);
   drawParts();
   c.setTransform(dpr,0,0,dpr,0,0);
@@ -943,7 +1014,7 @@ function render(now){
 const $ = id => document.getElementById(id);
 function updateHud(){
   $("hMission").textContent = `${Math.min(G.level+1, LEVELS.length)}/${LEVELS.length}`;
-  $("hLives").textContent = G.lives > 0 ? "■".repeat(G.lives) : "–";
+  $("hLives").textContent = G.lives > 6 ? "■ × " + G.lives : G.lives > 0 ? "■".repeat(G.lives) : "–";
   $("hFoes").textContent = G.tanks.length ? enemies().length : 0;
   $("hKills").textContent = G.kills;
 }
@@ -955,27 +1026,30 @@ function foeChips(list){
 function showOverlay(kind){
   overlay.hidden = false;
   let h = "";
-  if (kind === "title") h = `<div class="card"><p class="eyebrow">8 missioni · 5 tipi di carro nemico</p><h2>Scendi in campo, comandante.</h2>
+  if (kind === "title") h = `<div class="card"><p class="eyebrow">${LEVELS.length} missioni · 7 tipi di carro nemico</p><h2>Scendi in campo, comandante.</h2>
     <p>${touchMode ? "Inclina il telefono per muoverti, trascina il pollice destro per spostare il mirino, tocca a sinistra per sparare. Una spinta secca verso il basso posa una mina." : "Muoviti con WASD, mira col mouse, spara col clic."} I colpi rimbalzano sui blocchi di legno: usali per colpire dietro gli angoli.</p>
     ${touchMode ? `<p style="font-size:13px">Tieni il telefono in orizzontale come per giocare: la posizione di partenza conta come "fermo".${IOS_BROWSER ? " Per togliere anche le barre di Safari: Condividi, poi Aggiungi alla schermata Home." : ""}</p>` : ""}
-    <button class="btn" id="go">Inizia la missione 1</button></div>`;
+    <div style="display:flex;flex-wrap:wrap;gap:8px"><button class="btn" id="go">Inizia la missione 1</button>${loadBest() > 0 ? `<button class="btn" id="cont" style="background:#2b2621;box-shadow:0 3px 0 #000">Continua dalla missione ${loadBest()+1}</button>` : ""}</div></div>`;
   else if (kind === "intro"){ const L = LEVELS[G.level];
     h = `<div class="card"><p class="eyebrow">Missione ${G.level+1} di ${LEVELS.length} · vite ${G.lives}</p><h2>${L.name}</h2><div class="foes">${foeChips(enemies())}</div>${
       gyroMode() ? `<p style="font-size:13px">Tieni il telefono fermo: sto calibrando l'inclinazione.</p>` : touchMode ? `<p style="font-size:13px">Sensori non disponibili: pollice sinistro per muoverti, pollice destro per mirare e rilascia per sparare.</p>` : ""}</div>`; }
-  else if (kind === "clear") h = `<div class="card"><p class="eyebrow">Missione ${G.level+1} completata</p><h2>Settore ripulito</h2>${(G.level+1)%3===0 && G.level+1<LEVELS.length ? "<p>Vita extra guadagnata.</p>" : ""}</div>`;
+  else if (kind === "clear") h = `<div class="card"><p class="eyebrow">Missione ${G.level+1} completata</p><h2>Settore ripulito</h2>${(G.level+1)%5===0 && G.level+1<LEVELS.length ? "<p>Vita extra guadagnata.</p>" : ""}</div>`;
   else if (kind === "pause") h = `<div class="card"><p class="eyebrow">Pausa</p><h2>Cessate il fuoco</h2><button class="btn" id="go">Riprendi</button></div>`;
-  else if (kind === "over") h = `<div class="card"><p class="eyebrow">Partita finita</p><h2>Carro fuori combattimento</h2><p>Missione raggiunta: ${G.level+1} di ${LEVELS.length}. Nemici abbattuti: ${G.kills}.</p><button class="btn" id="go">Ricomincia</button></div>`;
+  else if (kind === "over") h = `<div class="card"><p class="eyebrow">Partita finita</p><h2>Carro fuori combattimento</h2><p>Missione raggiunta: ${G.level+1} di ${LEVELS.length}. Nemici abbattuti: ${G.kills}.</p><div style="display:flex;flex-wrap:wrap;gap:8px"><button class="btn" id="cont">Riprova la missione ${G.level+1}</button><button class="btn" id="go" style="background:#2b2621;box-shadow:0 3px 0 #000">Ricomincia da capo</button></div></div>`;
   else if (kind === "win") h = `<div class="card"><p class="eyebrow">Tutte le ${LEVELS.length} missioni completate</p><h2>Vittoria!</h2><p>Nemici abbattuti: ${G.kills}. Vite rimaste: ${G.lives}.</p><button class="btn" id="go">Gioca di nuovo</button></div>`;
   overlay.innerHTML = h;
   const go = $("go"); if (go) go.addEventListener("click", e => { e.stopPropagation(); primary(); });
+  const cont = $("cont"); if (cont) cont.addEventListener("click", e => { e.stopPropagation(); primary(G.state === "over" ? G.level : loadBest()); });
 }
 function hideOverlay(){ overlay.hidden = true; overlay.innerHTML = ""; cv.focus(); }
-function startGame(){ G.level = 0; G.lives = 3; G.kills = 0; G.killed = new Set(); startLevel(); }
-function startLevel(){ loadLevel(); G.state = "intro"; G.timer = 2.2; showOverlay("intro"); }
-function primary(){
+function loadBest(){ try { return Math.max(0, Math.min(LEVELS.length-1, parseInt(localStorage.getItem("cingolini-best")||"0",10)||0)); } catch(e){ return 0; } }
+function saveBest(l){ try { if (l > loadBest()) localStorage.setItem("cingolini-best", String(l)); } catch(e){} }
+function startGame(from){ G.level = from || 0; G.lives = 3; G.kills = 0; G.killed = new Set(); startLevel(); }
+function startLevel(){ saveBest(G.level); loadLevel(); G.state = "intro"; G.timer = 2.2; showOverlay("intro"); }
+function primary(from){
   audioInit();
   if (touchMode){ askMotion(); goFullscreen(); document.body.classList.add("full"); scrollTo(0,0); }
-  if (G.state === "title" || G.state === "over" || G.state === "win") startGame();
+  if (G.state === "title" || G.state === "over" || G.state === "win") startGame(typeof from === "number" ? from : 0);
   else if (G.state === "paused") { G.state = "play"; hideOverlay(); }
 }
 function togglePause(){
@@ -1062,7 +1136,7 @@ overlay.addEventListener("mousemove", setMouse);
 
 // ---------------------------------------------------------------- legenda
 const roster = $("roster");
-for (const k of ["s","r","b","l","t"]){
+for (const k of ["s","r","b","l","t","c","v"]){
   const T = TYPES[k], el = document.createElement("div"); el.className = "foe";
   const c = document.createElement("canvas"); c.width = 88; c.height = 88;
   const x = c.getContext("2d"); x.scale(2,2); drawTank(x, 21, 21, 0, -0.6, T, 0);

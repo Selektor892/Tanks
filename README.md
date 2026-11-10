@@ -1,6 +1,6 @@
 # Cingolini
 
-Gioco di carri armati in miniatura visto dall'alto: 8 missioni, colpi che rimbalzano, mine e 5 tipi di carri nemici.
+Gioco di carri armati in miniatura visto dall'alto: 80 missioni originali, colpi che rimbalzano, mine e 7 tipi di carri nemici. I progressi restano salvati nel browser.
 
 Si gioca nel browser: https://selektor892.github.io/Tanks/
 
