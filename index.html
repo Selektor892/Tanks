@@ -54,6 +54,32 @@ canvas#game{display:block;width:100%;height:100%;cursor:none;outline:none}
 .opt{font-family:var(--mono);font-size:12px;font-weight:600;letter-spacing:.03em;background:transparent;color:var(--ink);border:2px solid var(--ink-soft);border-radius:99px;padding:5px 11px;cursor:pointer;touch-action:manipulation}
 .opt[aria-pressed="true"]{background:var(--ink);color:var(--paper);border-color:var(--ink)}
 .opt:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+body.mpmode .hud{visibility:hidden}
+.btn.dark{background:#2b2621;box-shadow:0 3px 0 #000}
+.btn:disabled{opacity:.45;cursor:not-allowed;filter:none}
+.card.wide{max-width:640px}
+.card h3{font-family:var(--mono);font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-soft);margin:0}
+.fld{display:flex;flex-direction:column;gap:4px;font-family:var(--mono);font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-soft)}
+.fld input,#lobbyChatIn{font:15px var(--body);color:var(--ink);background:#fffdf6;border:2px solid #cfc6ae;border-radius:4px;padding:7px 10px;text-transform:none;letter-spacing:normal}
+.fld input:focus,#lobbyChatIn:focus,#chatIn:focus{outline:none;border-color:var(--accent)}
+.cols{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px}
+@media (max-width:620px){.cols{grid-template-columns:minmax(0,1fr)}}
+.col{display:flex;flex-direction:column;gap:8px;min-width:0}
+.plist{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
+.plist li{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:14px}
+.plist li i{width:14px;height:14px;border-radius:3px;border:2px solid #b9b09a;flex:none}
+.plist li em{font-style:normal;font-family:var(--mono);font-size:12px;color:var(--ink-soft)}
+.plist li.empty{color:#a59d8a}
+.plist.score li{justify-content:space-between;font-size:16px;border-bottom:1px solid #ddd3bb;padding-bottom:4px}
+.chatlog{height:130px;overflow-y:auto;background:#fffdf6;border:2px solid #cfc6ae;border-radius:4px;padding:6px 8px;font-size:13px}
+.chatlog p{margin:0 0 3px;color:var(--ink)}
+.chatlog p.sys{color:var(--ink-soft);font-style:italic}
+.codebox{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.codebox span{font-family:var(--mono);font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-soft)}
+.codebox b{font-family:var(--display);font-weight:400;font-size:34px;letter-spacing:.12em;color:var(--accent)}
+.small{font-size:13px}
+.err{color:#a3361a;font-size:14px}
+#chatIn{position:absolute;left:12px;right:12px;bottom:12px;font:15px var(--body);color:#2b2621;background:rgba(255,253,246,.95);border:2px solid #2b2621;border-radius:4px;padding:8px 10px}
 .say{font-family:var(--display);font-size:clamp(34px,8vw,56px);color:var(--accent);margin:0;line-height:1}
 .notes{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.4fr);gap:24px}
 @media (max-width:720px){.notes{grid-template-columns:minmax(0,1fr)}}
@@ -459,7 +485,7 @@ function drawPaper(){
 }
 
 // ---------------------------------------------------------------- stato
-const G = { state:"title", level:0, lives:3, kills:0, grid:[], tanks:[], player:null, bullets:[], mines:[], parts:[], killed:new Set(), timer:0, shake:0 };
+const G = { mode:"solo", nextId:1, state:"title", level:0, lives:3, kills:0, grid:[], tanks:[], player:null, bullets:[], mines:[], parts:[], killed:new Set(), timer:0, shake:0 };
 const keys = {}; const mouse = { x:W/2, y:H/2, down:false };
 const TS = { move:null, aim:null }, STICK_R = 75; let touchMode = false;
 
@@ -652,7 +678,7 @@ function fire(t){
   const a = t.turret, tx = t.x + Math.cos(a)*26, ty = t.y + Math.sin(a)*26;
   const fast = t.T.bulletSpeed > 300;
   if (solidAt(tx,ty,4)) { puff(tx,ty,4); SFX.fizz(); return; }
-  G.bullets.push({ x:tx, y:ty, vx:Math.cos(a)*t.T.bulletSpeed, vy:Math.sin(a)*t.T.bulletSpeed, r:4, bounces:t.T.bounces, owner:t, dist:0, fast, trail:0, alive:true });
+  G.bullets.push({ id:G.nextId++, x:tx, y:ty, vx:Math.cos(a)*t.T.bulletSpeed, vy:Math.sin(a)*t.T.bulletSpeed, r:4, bounces:t.T.bounces, owner:t, dist:0, fast, trail:0, alive:true });
   for (let i=0;i<5;i++) G.parts.push({ x:tx, y:ty, vx:Math.cos(a)*rand(20,80)+rand(-20,20), vy:Math.sin(a)*rand(20,80)+rand(-20,20), life:0, max:rand(.25,.45), size:rand(3,6), kind:"smoke" });
   fast ? SFX.rocket() : SFX.shoot();
 }
@@ -699,7 +725,7 @@ function trace(sx,sy,ang,bounces,shooter){
 // ---------------------------------------------------------------- mine ed esplosioni
 function layMine(t){
   if (G.mines.some(m => !m.gone && dist2(m,t) < 30*30)) return false;
-  G.mines.push({ x:t.x, y:t.y, owner:t, timer:10, arm:0.9, left:false, gone:false });
+  G.mines.push({ id:G.nextId++, x:t.x, y:t.y, owner:t, timer:10, arm:0.9, left:false, gone:false });
   SFX.mine(); return true;
 }
 const activeMines = t => G.mines.filter(m => !m.gone && m.owner===t).length;
@@ -715,12 +741,15 @@ function updateMines(dt){
   }
   G.mines = G.mines.filter(m => !m.gone);
 }
-function explode(x,y,R){
+function explodeFx(x,y,R){
   SFX.boom(); G.shake = Math.max(G.shake, 10);
   scorch(x,y,R*0.7);
   G.parts.push({ x, y, vx:0, vy:0, life:0, max:0.35, size:R, kind:"ring" });
   for (let i=0;i<26;i++){ const a = rand(0,TAU), s = rand(30,200); G.parts.push({ x, y, vx:Math.cos(a)*s, vy:Math.sin(a)*s, life:0, max:rand(.3,.7), size:rand(5,12), kind:"fire" }); }
   for (let i=0;i<14;i++){ const a = rand(0,TAU), s = rand(10,60); G.parts.push({ x, y, vx:Math.cos(a)*s, vy:Math.sin(a)*s, life:0, max:rand(.8,1.5), size:rand(8,16), kind:"smoke" }); }
+}
+function explode(x,y,R){
+  explodeFx(x,y,R);
   for (const t of G.tanks) if (t.alive && dist2(t,{x,y}) < (R+t.r*0.4)**2) killTank(t);
   for (const b of G.bullets) if (b.alive && dist2(b,{x,y}) < R*R) b.alive = false;
   for (const m of G.mines) if (!m.gone && m.timer > 0.06 && dist2(m,{x,y}) < R*R) m.timer = 0.06;
@@ -736,13 +765,16 @@ function killTank(t){
   if (!t.alive) return;
   t.alive = false;
   if (!t.isPlayer){ G.killed.add(t.id); G.kills++; }
+  killFx(t);
+  updateHud();
+}
+function killFx(t){
   G.shake = Math.max(G.shake, 8); SFX.boom();
   scorch(t.x,t.y,30);
   fctx.save(); fctx.translate(t.x,t.y); fctx.rotate(0.3); fctx.strokeStyle = t.T.dark; fctx.globalAlpha = .55; fctx.lineWidth = 5; fctx.lineCap = "round";
   fctx.beginPath(); fctx.moveTo(-11,-11); fctx.lineTo(11,11); fctx.moveTo(11,-11); fctx.lineTo(-11,11); fctx.stroke(); fctx.restore();
   for (let i=0;i<22;i++){ const a = rand(0,TAU), s = rand(40,190); G.parts.push({ x:t.x, y:t.y, vx:Math.cos(a)*s, vy:Math.sin(a)*s, life:0, max:rand(.3,.65), size:rand(4,10), kind:"fire" }); }
   for (let i=0;i<8;i++){ const a = rand(0,TAU), s = rand(60,160); G.parts.push({ x:t.x, y:t.y, vx:Math.cos(a)*s, vy:Math.sin(a)*s, life:0, max:rand(.5,.9), size:rand(3,5), kind:"chip", color:t.T.color, rot:rand(0,TAU) }); }
-  updateHud();
 }
 function puff(x,y,n){ for (let i=0;i<n;i++) G.parts.push({ x, y, vx:rand(-40,40), vy:rand(-40,40), life:0, max:rand(.3,.5), size:rand(3,6), kind:"smoke" }); }
 function spark(x,y){ for (let i=0;i<4;i++) G.parts.push({ x, y, vx:rand(-120,120), vy:rand(-120,120), life:0, max:rand(.1,.22), size:2, kind:"spark" }); }
@@ -865,50 +897,66 @@ function updateEnemy(t, dt){
 }
 
 // ---------------------------------------------------------------- giocatore
-function updatePlayer(p, dt){
+// Legge i comandi del giocatore locale (tastiera, mouse, touch, giroscopio, voce).
+function readLocalInput(p, dt){
   let mx = (keys.KeyD||keys.ArrowRight?1:0) - (keys.KeyA||keys.ArrowLeft?1:0);
   let my = (keys.KeyS||keys.ArrowDown?1:0) - (keys.KeyW||keys.ArrowUp?1:0);
-  let mag = 1;
+  let mag = 1, aim = p.turret;
   const sm = TS.move;
   if (gyroMode() && !tiltAim()){ const t = tiltVector(); if (t[2] > 0){ mx = t[0]; my = t[1]; mag = t[2]; } }
   else if (sm){ const dx = sm.x-sm.ox, dy = sm.y-sm.oy, l = Math.hypot(dx,dy); if (l > 8){ mx = dx; my = dy; mag = Math.min(1, l/STICK_R); } }
-  if (mx || my){
-    const l = Math.hypot(mx,my); mx/=l; my/=l;
-    p.body = turnAxis(p.body, Math.atan2(my,mx), 10*dt);
-    moveTank(p, mx*p.T.speed*mag, my*p.T.speed*mag, dt);
-  }
   const sa = TS.aim;
-  if (tiltAim()){ const t = tiltVector(); if (t[2] > 0) p.turret = turnTo(p.turret, Math.atan2(t[1],t[0]), 9*dt); }
-  else if (gyroMode()) p.turret = Math.atan2(mouse.y-p.y, mouse.x-p.x);
-  else if (touchMode){
-    if (sa &&Math.hypot(sa.x-sa.ox, sa.y-sa.oy) > 10) p.turret = Math.atan2(sa.y-sa.oy, sa.x-sa.ox);
-  } else p.turret = Math.atan2(mouse.y-p.y, mouse.x-p.x);
-  p.cool -= dt;
-  if (keys.wantFire){ keys.wantFire = false; mouse.down = true; p.cool = Math.min(p.cool, 0); }
-  if (mouse.down && p.cool <= 0 && G.bullets.filter(b=>b.alive && b.owner===p).length < p.T.maxB){ fire(p); p.cool = p.T.cd; }
-  mouse.down = false;
-  if (keys.wantMine){ keys.wantMine = false; if (activeMines(p) < p.T.mines) layMine(p); }
+  if (tiltAim()){ const t = tiltVector(); if (t[2] > 0) aim = turnTo(p.turret, Math.atan2(t[1],t[0]), 9*dt); }
+  else if (gyroMode()) aim = Math.atan2(mouse.y-p.y, mouse.x-p.x);
+  else if (touchMode){ if (sa && Math.hypot(sa.x-sa.ox, sa.y-sa.oy) > 10) aim = Math.atan2(sa.y-sa.oy, sa.x-sa.ox); }
+  else aim = Math.atan2(mouse.y-p.y, mouse.x-p.x);
+  const force = !!keys.wantFire, fireReq = force || mouse.down;
+  keys.wantFire = false; mouse.down = false;
+  const mine = !!keys.wantMine; keys.wantMine = false;
+  return { mx, my, mag, aim, fire:fireReq, force, mine };
 }
+// Applica i comandi a un carro (usato per il giocatore locale e, in multigiocatore, per quelli remoti).
+function applyInput(p, inp, dt){
+  if (inp.mx || inp.my){
+    const l = Math.hypot(inp.mx,inp.my), mx = inp.mx/l, my = inp.my/l;
+    p.body = turnAxis(p.body, Math.atan2(my,mx), 10*dt);
+    moveTank(p, mx*p.T.speed*inp.mag, my*p.T.speed*inp.mag, dt);
+  }
+  p.turret = inp.aim;
+  p.cool -= dt;
+  if (inp.fire && (p.cool <= 0 || inp.force) && G.bullets.filter(b=>b.alive && b.owner===p).length < p.T.maxB){ fire(p); p.cool = p.T.cd; }
+  if (inp.mine && activeMines(p) < p.T.mines) layMine(p);
+}
+function updatePlayer(p, dt){ applyInput(p, readLocalInput(p, dt), dt); }
 
 // ---------------------------------------------------------------- ciclo
+// Un passo della simulazione condivisa: proiettili, scontri tra proiettili, mine.
+function worldStep(dt){
+  separateTanks();
+  for (const b of G.bullets){
+    if (!b.alive) continue;
+    if (!stepBullet(b, dt)) { b.alive = false; puff(b.x,b.y,4); SFX.pop(); continue; }
+    b.trail += dt;
+    if (b.trail > (b.fast ? 0.012 : 0.035)){ b.trail = 0; G.parts.push({ x:b.x, y:b.y, vx:rand(-6,6), vy:rand(-6,6), life:0, max:b.fast?.35:.45, size:b.fast?4:3, kind:b.fast?"fire":"smoke" }); }
+  }
+  // collisioni proiettile-proiettile
+  const bs = G.bullets.filter(b=>b.alive);
+  for (let i=0;i<bs.length;i++) for (let j=i+1;j<bs.length;j++){
+    if (bs[i].alive && bs[j].alive && dist2(bs[i],bs[j]) < 64){ bs[i].alive = bs[j].alive = false; puff((bs[i].x+bs[j].x)/2,(bs[i].y+bs[j].y)/2,6); SFX.pop(); }
+  }
+  G.bullets = G.bullets.filter(b=>b.alive);
+  updateMines(dt);
+}
+function particleStep(dt){
+  for (const p of G.parts){ p.life += dt; p.x += p.vx*dt; p.y += p.vy*dt; p.vx *= 0.94; p.vy *= 0.94; }
+  G.parts = G.parts.filter(p => p.life < p.max);
+  G.shake = Math.max(0, G.shake - dt*30);
+}
 function update(dt){
   if (G.state === "play" || G.state === "dead" || G.state === "clear"){
     if (G.state === "play" && G.player.alive) updatePlayer(G.player, dt);
     if (G.state !== "clear") for (const t of G.tanks) if (t.alive && !t.isPlayer) updateEnemy(t, dt);
-    separateTanks();
-    for (const b of G.bullets){
-      if (!b.alive) continue;
-      if (!stepBullet(b, dt)) { b.alive = false; puff(b.x,b.y,4); SFX.pop(); continue; }
-      b.trail += dt;
-      if (b.trail > (b.fast ? 0.012 : 0.035)){ b.trail = 0; G.parts.push({ x:b.x, y:b.y, vx:rand(-6,6), vy:rand(-6,6), life:0, max:b.fast?.35:.45, size:b.fast?4:3, kind:b.fast?"fire":"smoke" }); }
-    }
-    // collisioni proiettile-proiettile
-    const bs = G.bullets.filter(b=>b.alive);
-    for (let i=0;i<bs.length;i++) for (let j=i+1;j<bs.length;j++){
-      if (bs[i].alive && bs[j].alive && dist2(bs[i],bs[j]) < 64){ bs[i].alive = bs[j].alive = false; puff((bs[i].x+bs[j].x)/2,(bs[i].y+bs[j].y)/2,6); SFX.pop(); }
-    }
-    G.bullets = G.bullets.filter(b=>b.alive);
-    updateMines(dt);
+    worldStep(dt);
 
     if (G.state === "play"){
       if (!G.player.alive){ G.state = "dead"; G.timer = 2.0; }
@@ -930,9 +978,7 @@ function update(dt){
   } else if (G.state === "intro"){
     G.timer -= dt; if (G.timer <= 0){ G.state = "play"; hideOverlay(); calibrate(); }
   }
-  for (const p of G.parts){ p.life += dt; p.x += p.vx*dt; p.y += p.vy*dt; p.vx *= 0.94; p.vy *= 0.94; }
-  G.parts = G.parts.filter(p => p.life < p.max);
-  G.shake = Math.max(0, G.shake - dt*30);
+  particleStep(dt);
 }
 
 // ---------------------------------------------------------------- disegno
@@ -1063,7 +1109,8 @@ function render(now){
   for (const b of G.bullets) drawBullet(b);
   drawParts();
   c.setTransform(dpr,0,0,dpr,0,0);
-  if (document.body.classList.contains("full")){
+  if (G.mode === "mp") drawMpHud(c);
+  else if (document.body.classList.contains("full")){
     // HUD compatto sul campo quando la pagina è a schermo intero
     const txt = `MISSIONE ${Math.min(G.level+1,LEVELS.length)}/${LEVELS.length}   VITE ${G.lives}   NEMICI ${enemies().length}`;
     c.font = "600 15px 'IBM Plex Mono', monospace"; c.textAlign = "center"; c.textBaseline = "top";
@@ -1099,7 +1146,7 @@ function showOverlay(kind){
     ${touchMode ? `<p style="font-size:13px">Tieni il telefono in orizzontale come per giocare: la posizione di partenza conta come "fermo".${IOS_BROWSER ? " Per togliere anche le barre di Safari: Condividi, poi Aggiungi alla schermata Home." : ""}</p>` : ""}
     <div class="opts">${touchMode ? `<button class="opt" id="optScheme" aria-pressed="${PREFS.scheme === "tiltAim"}">Inclinazione: ${PREFS.scheme === "tiltAim" ? "mira" : "guida"}</button>` : ""}<button class="opt" id="optVoice" aria-pressed="${PREFS.voice}">Voce PEW/BOOM: ${PREFS.voice ? "sì" : "no"}</button>${PREFS.voice ? `<button class="opt" id="optCal">Tara la voce</button>` : ""}</div>
     ${VOICE.err ? `<p style="font-size:13px;color:#a3361a">${VOICE.err}</p>` : ""}
-    <div style="display:flex;flex-wrap:wrap;gap:8px"><button class="btn" id="go">Inizia la missione 1</button>${loadBest() > 0 ? `<button class="btn" id="cont" style="background:#2b2621;box-shadow:0 3px 0 #000">Continua dalla missione ${loadBest()+1}</button>` : ""}</div></div>`;
+    <div style="display:flex;flex-wrap:wrap;gap:8px"><button class="btn" id="go">Inizia la missione 1</button><button class="btn dark" id="mpOpen">Multigiocatore</button>${loadBest() > 0 ? `<button class="btn" id="cont" style="background:#2b2621;box-shadow:0 3px 0 #000">Continua dalla missione ${loadBest()+1}</button>` : ""}</div></div>`;
   else if (kind === "voice"){ const c = VOICE.cal, n = c.vals.length;
     h = c.done ? `<div class="card"><p class="eyebrow">Taratura voce</p><h2>${c.ok ? "Fatto!" : "Non distinguo i due suoni"}</h2>
       <p>${c.ok ? "Ora PEW spara e BOOM posa una mina. Puoi ripetere la taratura quando vuoi." : "PEW e BOOM mi sono sembrati troppo simili. Prova a dire PEW più secco e acuto, e BOOM più lungo e grave."}</p>
@@ -1123,6 +1170,7 @@ function showOverlay(kind){
     catch(e){ VOICE.err = "Microfono non disponibile: serve il permesso e una pagina aperta dal sito, non da Claude."; PREFS.voice = false; savePrefs(); showOverlay("title"); }
   });
   on("optCal", beginVoiceCal);
+  on("mpOpen", () => { audioInit(); mpShowMenu(""); });
   on("calAgain", beginVoiceCal);
   on("calDone", () => { VOICE.cal = null; showOverlay("title"); });
   const cont = $("cont"); if (cont) cont.addEventListener("click", e => { e.stopPropagation(); primary(G.state === "over" ? G.level : loadBest()); });
@@ -1141,6 +1189,7 @@ function primary(from){
   else if (G.state === "paused") { G.state = "play"; hideOverlay(); }
 }
 function togglePause(){
+  if (G.mode === "mp") return;
   if (G.state === "play"){ G.state = "paused"; showOverlay("pause"); }
   else if (G.state === "paused"){ G.state = "play"; hideOverlay(); }
 }
@@ -1148,6 +1197,7 @@ function togglePause(){
 // ---------------------------------------------------------------- input
 addEventListener("keydown", e => {
   if (e.target.tagName === "BUTTON" && (e.code === "Space" || e.code === "Enter")) return;
+  if (e.target.tagName === "INPUT") return;
   const game = ["KeyW","KeyA","KeyS","KeyD","ArrowUp","ArrowDown","ArrowLeft","ArrowRight","Space"];
   if (game.includes(e.code) && G.state !== "title") e.preventDefault();
   keys[e.code] = true;
@@ -1164,7 +1214,7 @@ cv.addEventListener("mousedown", e => {
   if (e.button === 0) mouse.down = true;
   if (e.button === 2 && G.state === "play") keys.wantMine = true;
 });
-addEventListener("mouseup", e => { if (e.button === 0) mouse.down = false; });
+// il clic resta "prenotato" finché il gioco non lo legge, così anche i clic rapidissimi sparano
 cv.addEventListener("contextmenu", e => e.preventDefault());
 
 // touch: metà sinistra = joystick movimento, metà destra = joystick mira (rilascia per sparare)
@@ -1238,20 +1288,565 @@ for (const k of ["s","r","b","l","t","c","v"]){
   roster.append(el);
 }
 
+// ================================================================ MULTIGIOCATORE
+// Stanze peer-to-peer: chi crea la stanza fa da host e simula la partita; gli altri mandano i comandi
+// e ricevono istantanee dello stato 30 volte al secondo. La connessione passa da PeerJS (WebRTC).
+const MP_ARENAS = [
+  { name:"Quattro angoli", q:[
+    "............",
+    "............",
+    "............",
+    ".....##.....",
+    ".....#......",
+    "..........xx",
+    "............",
+    "...x.......#"]},
+  { name:"Croce", q:[
+    "............",
+    "............",
+    "...........#",
+    "....xx.....#",
+    "....xx.....#",
+    "............",
+    "............",
+    "......####.."]},
+  { name:"Fossati", q:[
+    "............",
+    "............",
+    ".....ooo....",
+    "............",
+    "..x.........",
+    ".......oo...",
+    ".......oo...",
+    ".x.......x.."]},
+  { name:"Corridoi", q:[
+    "............",
+    "....#.......",
+    "....#...xx..",
+    "....#.......",
+    "........#...",
+    "..xxx...#...",
+    "........#...",
+    "............"]},
+];
+function mpArenaGrid(i){
+  const q = MP_ARENAS[i % MP_ARENAS.length].q, g = [];
+  for (let r=0;r<ROWS;r++){ const row = []; for (let c=0;c<COLS;c++){
+    const ch = q[r<8 ? r : ROWS-1-r][c<12 ? c : COLS-1-c];
+    row.push(ch==="#" ? 1 : ch==="x" ? 2 : ch==="o" ? 3 : 0);
+  } g.push(row); }
+  return g;
+}
+const MP_SPAWNS = [[2,2],[21,13],[21,2],[2,13]];
+const MP_COLORS = [ {color:"#4aa35a",dark:"#245a2f"}, {color:"#3d6fd1",dark:"#1d3a7a"}, {color:"#d65a2e",dark:"#842f12"}, {color:"#e0b31f",dark:"#7a5d06"} ];
+const TEAM_INFO = { A:{ name:"Verdi", color:"#4aa35a", dark:"#245a2f" }, B:{ name:"Blu", color:"#3d6fd1", dark:"#1d3a7a" } };
+const MODES = { "1v1":{ label:"1 contro 1", max:2 }, "2v2":{ label:"2 contro 2", max:4 }, "ffa":{ label:"Tutti contro tutti", max:4 } };
+const PEER_PREFIX = "cingolini-v1-";
+const QS = new URLSearchParams(location.search);
+const PEER_OPTS = QS.get("peerhost") ? { host:QS.get("peerhost"), port:+(QS.get("peerport")||9000), path:"/", secure:false, debug:0 } : { debug:0 };
+
+const MP = { role:null, peer:null, conns:new Map(), hostConn:null, myId:null, code:"", room:null, players:[], chat:[],
+  pend:new Map(), seq:{ fire:0, mine:0 }, sendT:0, snapT:0, scores:{}, round:0, phase:"lobby", roundT:0, banner:"",
+  lastGrid:"", started:false, joinTimer:null, inMatch:false, winner:"" };
+
+const esc = s => String(s).replace(/[&<>"']/g, ch => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" })[ch]);
+function myName(){ try { return localStorage.getItem("cingolini-name") || ""; } catch(e){ return ""; } }
+function saveName(n){ try { localStorage.setItem("cingolini-name", n); } catch(e){} }
+const cleanName = n => (String(n || "").replace(/[\u0000-\u001f]/g, "").trim().slice(0,16)) || "Comandante";
+function randCode(){ const a = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; let s = ""; for (let i=0;i<5;i++) s += a[Math.floor(Math.random()*a.length)]; return s; }
+function roomLink(){ return location.origin + location.pathname + "?stanza=" + MP.code; }
+
+let peerLoading = null;
+function loadPeer(){
+  if (window.Peer) return Promise.resolve();
+  if (peerLoading) return peerLoading;
+  const add = src => new Promise((ok, ko) => { const s = document.createElement("script"); s.src = src; s.onload = ok; s.onerror = ko; document.head.appendChild(s); });
+  peerLoading = add("peerjs.min.js").catch(() => add("https://cdnjs.cloudflare.com/ajax/libs/peerjs/1.5.4/peerjs.min.js"))
+    .then(() => { if (!window.Peer) throw new Error("nopeer"); })
+    .catch(e => { peerLoading = null; throw e; });
+  return peerLoading;
+}
+
+function playerColor(pl){
+  if (MP.room && MP.room.mode === "2v2") return TEAM_INFO[pl.team] || MP_COLORS[0];
+  const i = MP.players.findIndex(x => x.id === pl.id);
+  return MP_COLORS[Math.max(0,i) % MP_COLORS.length];
+}
+function teamLabel(team){
+  if (TEAM_INFO[team] && MP.room && MP.room.mode === "2v2") return TEAM_INFO[team].name;
+  const p = MP.players.find(x => x.id === team); return p ? p.name : "?";
+}
+function mpCanStart(){
+  if (!MP.room) return false;
+  const n = MP.players.length, m = MP.room.mode;
+  if (m === "1v1") return n === 2;
+  if (m === "ffa") return n >= 2;
+  const a = MP.players.filter(p => p.team === "A").length, b = MP.players.filter(p => p.team === "B").length;
+  return a >= 1 && b >= 1 && a <= 2 && b <= 2;
+}
+function mpStartHint(){
+  const m = MP.room.mode, n = MP.players.length;
+  if (m === "1v1" && n < 2) return "In attesa di un avversario.";
+  if (m === "ffa" && n < 2) return "Serve almeno un altro giocatore.";
+  if (m === "2v2" && !mpCanStart()) return "Servono giocatori in entrambe le squadre, al massimo 2 per squadra.";
+  return "";
+}
+
+// ---------------------------------------------------------------- invio
+function mpSend(conn, msg){ try { if (conn && conn.open) conn.send(msg); } catch(e){} }
+function mpBroadcast(msg){ for (const c of MP.conns.values()) mpSend(c, msg); }
+function mpBroadcastLobby(){
+  for (const [id, c] of MP.conns) mpSend(c, { t:"lobby", code:MP.code, room:MP.room, players:MP.players, you:id, inMatch:MP.inMatch });
+  if (MP.role === "host") mpRenderLobby();
+}
+function mpChat(name, text, system){
+  MP.chat.push({ name, text, system:!!system, t:performance.now() });
+  if (MP.chat.length > 60) MP.chat.shift();
+  mpRenderLobby();
+}
+function mpSay(text){
+  text = String(text || "").trim().slice(0,140); if (!text) return;
+  if (MP.role === "host"){ const me = MP.players.find(p => p.id === "host"); mpChat(me.name, text); mpBroadcast({ t:"chat", name:me.name, text }); }
+  else mpSend(MP.hostConn, { t:"chat", text });
+}
+
+// ---------------------------------------------------------------- host
+function mpHost(mode, rounds){
+  return loadPeer().then(() => new Promise((ok, ko) => {
+    MP.role = "host"; MP.myId = "host"; MP.room = { mode, rounds }; MP.chat = []; MP.inMatch = false;
+    MP.players = [{ id:"host", name:cleanName(myName()), team: mode === "2v2" ? "A" : "host" }];
+    let tries = 0;
+    const open = () => {
+      MP.code = randCode();
+      const peer = new Peer(PEER_PREFIX + MP.code, PEER_OPTS); MP.peer = peer;
+      peer.on("open", () => { ok(); mpChat("", "Stanza creata. Condividi il codice o il link con gli amici.", true); });
+      peer.on("error", e => {
+        if (e.type === "unavailable-id" && tries++ < 3){ try { peer.destroy(); } catch(_){} open(); return; }
+        if (MP.role === "host" && peer.open) return;   // errori di un singolo collegamento
+        ko(e);
+      });
+      peer.on("connection", conn => {
+        conn.on("data", d => mpHostData(conn, d));
+        conn.on("close", () => mpHostDrop(conn.peer));
+        conn.on("error", () => mpHostDrop(conn.peer));
+      });
+      peer.on("disconnected", () => { try { peer.reconnect(); } catch(_){} });
+    };
+    open();
+  }));
+}
+function mpHostData(conn, d){
+  if (!d || typeof d !== "object") return;
+  const id = conn.peer;
+  if (d.t === "hello"){
+    if (MP.conns.has(id)) return;
+    if (MP.inMatch || MP.players.length >= MODES[MP.room.mode].max){ mpSend(conn, { t:"full", inMatch:MP.inMatch }); setTimeout(() => { try { conn.close(); } catch(e){} }, 400); return; }
+    let team = id;
+    if (MP.room.mode === "2v2"){ const a = MP.players.filter(p => p.team === "A").length, b = MP.players.filter(p => p.team === "B").length; team = a <= b ? "A" : "B"; }
+    let name = cleanName(d.name);
+    if (MP.players.some(p => p.name === name)){ let k = 2; while (MP.players.some(p => p.name === name.slice(0,13) + " " + k)) k++; name = name.slice(0,13) + " " + k; }
+    MP.conns.set(id, conn); MP.players.push({ id, name, team });
+    mpBroadcastLobby();
+    mpChat("", name + " è entrato.", true); mpBroadcast({ t:"chat", name:"", text:name + " è entrato.", system:true });
+  } else if (d.t === "chat"){
+    const p = MP.players.find(x => x.id === id); if (!p) return;
+    const text = String(d.text || "").trim().slice(0,140); if (!text) return;
+    mpChat(p.name, text); mpBroadcast({ t:"chat", name:p.name, text });
+  } else if (d.t === "in"){
+    const num = (v, lo, hi) => (typeof v === "number" && isFinite(v)) ? Math.max(lo, Math.min(hi, v)) : 0;
+    MP.pend.set(id, { mx:num(d.mx,-1,1), my:num(d.my,-1,1), mag:num(d.mag,0,1), aim:num(d.aim,-10,10), f:num(d.f,0,1e9), m:num(d.m,0,1e9) });
+  }
+}
+function mpHostDrop(id){
+  if (!MP.conns.has(id)) return;
+  MP.conns.delete(id); MP.pend.delete(id);
+  const p = MP.players.find(x => x.id === id);
+  MP.players = MP.players.filter(x => x.id !== id);
+  const t = G.tanks.find(x => x.pid === id); if (t && t.alive) killTank(t);
+  if (p){ mpChat("", p.name + " è uscito.", true); mpBroadcast({ t:"chat", name:"", text:p.name + " è uscito.", system:true }); }
+  if (MP.inMatch && MP.players.length < 2){ mpEndMatch(true); return; }
+  mpBroadcastLobby();
+}
+function mpSwitchTeam(id){
+  if (MP.role !== "host" || MP.room.mode !== "2v2" || MP.inMatch) return;
+  const p = MP.players.find(x => x.id === id); if (!p) return;
+  p.team = p.team === "A" ? "B" : "A"; mpBroadcastLobby();
+}
+function mpStartMatch(){
+  if (MP.role !== "host" || !mpCanStart()) return;
+  audioInit();
+  MP.inMatch = true; MP.round = 0; MP.scores = {};
+  for (const p of MP.players) MP.scores[p.team] = 0;
+  mpBroadcastLobby();
+  mpStartRound();
+}
+function mpMakeTanks(list, arena){
+  G.grid = mpArenaGrid(arena);
+  G.tanks = []; G.bullets = []; G.mines = []; G.parts = [];
+  fctx.clearRect(0,0,W,H);
+  const used = { A:0, B:0 }, teamSpawns = { A:[0,3], B:[2,1] };
+  list.forEach((pl, i) => {
+    let si = i;
+    if (MP.room.mode === "2v2") si = teamSpawns[pl.team][used[pl.team]++ % 2];
+    const [c,r] = MP_SPAWNS[si % 4], x = c*CS+CS/2, y = r*CS+CS/2;
+    const t = makeTank("P", x, y, "mp-"+pl.id);
+    t.T = Object.assign({}, TYPES.P, playerColor(pl));
+    t.pid = pl.id; t.name = pl.name; t.team = pl.team; t.fSeen = 0; t.mSeen = 0; t.cool = 0;
+    t.turret = Math.atan2(H/2 - y, W/2 - x); t.body = Math.abs(t.turret) > Math.PI/2 ? Math.PI : 0;
+    t.tx = x; t.ty = y;
+    G.tanks.push(t);
+  });
+  G.player = G.tanks.find(t => t.pid === MP.myId) || null;
+  G.mode = "mp"; G.state = "play"; hideOverlay(); document.body.classList.add("mpmode");
+}
+function mpStartRound(){
+  const arena = MP.round % MP_ARENAS.length;
+  mpMakeTanks(MP.players, arena);
+  for (const t of G.tanks){ const pin = MP.pend.get(t.pid); if (pin){ t.fSeen = pin.f; t.mSeen = pin.m; } }
+  MP.phase = "count"; MP.roundT = 2.5; MP.banner = ""; MP.lastGrid = "";
+  mpBroadcast({ t:"round", arena, round:MP.round, players:MP.players });
+}
+function mpHostStep(dt){
+  if (MP.phase === "count"){ MP.roundT -= dt; if (MP.roundT <= 0) MP.phase = "fight"; }
+  if (MP.phase === "fight" || MP.phase === "end"){
+    for (const t of G.tanks){
+      if (!t.alive) continue;
+      if (t.pid === "host"){ applyInput(t, readLocalInput(t, dt), dt); continue; }
+      const pin = MP.pend.get(t.pid); if (!pin){ t.cool -= dt; continue; }
+      const inp = { mx:pin.mx, my:pin.my, mag:pin.mag, aim:pin.aim, fire:pin.f > t.fSeen, force:false, mine:pin.m > t.mSeen };
+      t.fSeen = pin.f; t.mSeen = pin.m;
+      applyInput(t, inp, dt);
+    }
+    worldStep(dt);
+  } else readLocalInput(G.player || { turret:0, x:0, y:0 }, dt);   // svuota i comandi durante il conto alla rovescia
+  if (MP.phase === "fight"){
+    const alive = new Set(G.tanks.filter(t => t.alive).map(t => t.team));
+    if (alive.size <= 1){
+      MP.phase = "end"; MP.roundT = 2.8;
+      if (alive.size === 1){ const w = [...alive][0]; MP.scores[w] = (MP.scores[w]||0) + 1; MP.banner = (MP.room.mode === "2v2" ? "Round ai " : "Round a ") + teamLabel(w); }
+      else MP.banner = "Pareggio: nessun punto";
+    }
+  } else if (MP.phase === "end"){
+    MP.roundT -= dt;
+    if (MP.roundT <= 0){
+      const w = Object.keys(MP.scores).find(k => MP.scores[k] >= MP.room.rounds);
+      if (w){ MP.winner = w; mpEndMatch(false); return; }
+      MP.round++; mpStartRound();
+    }
+  }
+  MP.snapT -= dt;
+  if (MP.snapT <= 0){ MP.snapT = 1/30; mpBroadcast(mpSnapshot()); }
+}
+function mpSnapshot(){
+  const R = v => Math.round(v), A = v => Math.round(v*100)/100;
+  const snap = { t:"s", ph:MP.phase, rt:A(MP.roundT), sc:MP.scores, bn:MP.banner,
+    k:G.tanks.map(t => [t.pid, R(t.x), R(t.y), A(t.body), A(t.turret), t.alive ? 1 : 0]),
+    b:G.bullets.filter(b => b.alive).map(b => [b.id, R(b.x), R(b.y), R(b.vx), R(b.vy), b.fast ? 1 : 0]),
+    m:G.mines.filter(m => !m.gone).map(m => [m.id, R(m.x), R(m.y), A(m.timer), m.arm > 0 ? 1 : 0]) };
+  const g = G.grid.map(r => r.join("")).join("");
+  if (g !== MP.lastGrid){ snap.g = g; MP.lastGrid = g; }
+  return snap;
+}
+function mpEndMatch(abandoned){
+  MP.inMatch = false; MP.phase = "lobby";
+  const msg = { t:"end", winner:abandoned ? "" : MP.winner, scores:MP.scores, abandoned:!!abandoned };
+  mpBroadcast(msg); mpShowEnd(msg);
+  mpBroadcastLobby();
+}
+
+// ---------------------------------------------------------------- client
+function mpJoin(code){
+  code = String(code || "").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0,5);
+  if (code.length !== 5) return Promise.reject({ type:"badcode" });
+  return loadPeer().then(() => new Promise((ok, ko) => {
+    MP.role = "client"; MP.code = code; MP.chat = []; MP.inMatch = false;
+    const peer = new Peer(undefined, PEER_OPTS); MP.peer = peer;
+    let done = false;
+    const fail = e => { if (!done){ done = true; clearTimeout(MP.joinTimer); ko(e); } else mpLost(e); };
+    MP.joinTimer = setTimeout(() => fail({ type:"timeout" }), 12000);
+    peer.on("error", fail);
+    peer.on("open", () => {
+      const conn = peer.connect(PEER_PREFIX + code, { reliable:true, serialization:"json" });
+      MP.hostConn = conn;
+      conn.on("open", () => mpSend(conn, { t:"hello", name:cleanName(myName()) }));
+      conn.on("data", d => { if (!done && d && d.t === "lobby"){ done = true; clearTimeout(MP.joinTimer); ok(); } mpClientData(d); });
+      conn.on("close", () => mpLost({ type:"closed" }));
+      conn.on("error", () => mpLost({ type:"closed" }));
+    });
+  }));
+}
+function mpLost(e){
+  if (MP.role !== "client") return;
+  const was = MP.role; mpCleanup();
+  if (was) mpShowMessage("Connessione persa", e && e.type === "full" ? "La stanza è piena o la partita è già iniziata." : "La stanza è stata chiusa oppure la connessione si è interrotta.");
+}
+function mpClientData(d){
+  if (!d || typeof d !== "object") return;
+  if (d.t === "lobby"){
+    MP.players = d.players; MP.room = d.room; MP.myId = d.you; MP.code = d.code; MP.inMatch = d.inMatch;
+    if (!MP.inMatch && G.state !== "mpend") mpRenderLobby(true);
+  } else if (d.t === "chat"){ mpChat(d.name, d.text, d.system); }
+  else if (d.t === "full"){ const r = MP.role; mpCleanup(); if (r) mpShowMessage("Non puoi entrare", d.inMatch ? "La partita in questa stanza è già iniziata. Riprova a fine partita." : "La stanza è piena."); }
+  else if (d.t === "round"){
+    MP.players = d.players; MP.round = d.round;
+    mpMakeTanks(d.players, d.arena);
+    MP.phase = "count"; MP.roundT = 2.5; MP.banner = ""; MP.seen = false;
+  } else if (d.t === "s"){ mpApplySnapshot(d); }
+  else if (d.t === "end"){ MP.inMatch = false; MP.phase = "lobby"; mpShowEnd(d); }
+}
+function mpApplySnapshot(s){
+  if (G.mode !== "mp") return;
+  const first = !MP.seen; MP.seen = true;
+  MP.phase = s.ph; MP.roundT = s.rt; MP.scores = s.sc || {}; MP.banner = s.bn || "";
+  if (typeof s.g === "string" && s.g.length === ROWS*COLS){
+    for (let r=0;r<ROWS;r++) for (let c=0;c<COLS;c++){
+      const v = +s.g[r*COLS+c];
+      if (G.grid[r][c] === 2 && v === 0 && !first) crateBits(c*CS+CS/2, r*CS+CS/2);
+      G.grid[r][c] = v;
+    }
+  }
+  for (const [pid,x,y,body,turret,alive] of s.k){
+    const t = G.tanks.find(q => q.pid === pid); if (!t) continue;
+    t.tx = x; t.ty = y; t.tbody = body;
+    if (t !== G.player) t.turret = turret;
+    if (t.alive && !alive){ t.x = x; t.y = y; t.alive = false; killFx(t); }
+    else if (!t.alive && alive){ t.alive = true; t.x = x; t.y = y; }
+    if (first){ t.x = x; t.y = y; t.body = body; }
+  }
+  const seenB = new Set();
+  for (const [id,x,y,vx,vy,fast] of s.b){
+    seenB.add(id);
+    let b = G.bullets.find(q => q.id === id);
+    if (!b){
+      b = { id, x, y, vx, vy, r:4, fast:!!fast, trail:0, alive:true };
+      G.bullets.push(b);
+      if (!first){ for (let i=0;i<5;i++) G.parts.push({ x, y, vx:vx*0.2+rand(-20,20), vy:vy*0.2+rand(-20,20), life:0, max:rand(.25,.45), size:rand(3,6), kind:"smoke" }); fast ? SFX.rocket() : SFX.shoot(); }
+    } else {
+      if ((Math.sign(vx) !== Math.sign(b.vx) && Math.abs(vx) > 1) || (Math.sign(vy) !== Math.sign(b.vy) && Math.abs(vy) > 1)){ spark(x,y); SFX.bounce(); }
+      b.x = x; b.y = y; b.vx = vx; b.vy = vy;
+    }
+  }
+  for (const b of G.bullets) if (!seenB.has(b.id)){ b.alive = false; puff(b.x,b.y,4); SFX.pop(); }
+  G.bullets = G.bullets.filter(b => b.alive);
+  const seenM = new Set();
+  for (const [id,x,y,timer,arm] of s.m){
+    seenM.add(id);
+    let m = G.mines.find(q => q.id === id);
+    if (!m){ m = { id, x, y, timer, arm:arm ? 1 : 0, gone:false }; G.mines.push(m); if (!first) SFX.mine(); }
+    else { m.timer = timer; m.arm = arm ? 1 : 0; }
+  }
+  for (const m of G.mines) if (!seenM.has(m.id)){ m.gone = true; explodeFx(m.x, m.y, 68); }
+  G.mines = G.mines.filter(m => !m.gone);
+}
+function mpClientStep(dt){
+  const me = G.player;
+  const inp = readLocalInput(me || { turret:0, x:W/2, y:H/2 }, dt);
+  if (inp.fire) MP.seq.fire++;
+  if (inp.mine) MP.seq.mine++;
+  if (me && me.alive) me.turret = inp.aim;
+  MP.sendT -= dt;
+  if (MP.sendT <= 0 || inp.fire || inp.mine){
+    MP.sendT = 1/30;
+    let mx = inp.mx, my = inp.my; const l = Math.hypot(mx,my); if (l > 0){ mx /= l; my /= l; }
+    mpSend(MP.hostConn, { t:"in", mx, my, mag:inp.mag, aim:inp.aim, f:MP.seq.fire, m:MP.seq.mine });
+  }
+  // fluidità: i carri scivolano verso la posizione ricevuta, i proiettili proseguono in linea retta
+  const k = Math.min(1, dt*18);
+  for (const t of G.tanks){
+    if (!t.alive) continue;
+    const ox = t.x, oy = t.y;
+    t.x += (t.tx - t.x)*k; t.y += (t.ty - t.y)*k;
+    if (typeof t.tbody === "number") t.body += wrap(t.tbody - t.body)*k;
+    const moved = Math.hypot(t.x-ox, t.y-oy); t.tread += moved; t.trackAcc += moved;
+    if (t.trackAcc > 7){ t.trackAcc = 0; stampTrack(t); }
+  }
+  for (const b of G.bullets){
+    b.x += b.vx*dt; b.y += b.vy*dt; b.trail += dt;
+    if (b.trail > (b.fast ? 0.012 : 0.035)){ b.trail = 0; G.parts.push({ x:b.x, y:b.y, vx:rand(-6,6), vy:rand(-6,6), life:0, max:b.fast?.35:.45, size:b.fast?4:3, kind:b.fast?"fire":"smoke" }); }
+  }
+  if (MP.phase === "count") MP.roundT -= dt;
+}
+function mpFrame(dt){
+  if (G.state === "play"){ if (MP.role === "host") mpHostStep(dt); else mpClientStep(dt); }
+  particleStep(dt);
+}
+
+// ---------------------------------------------------------------- uscita
+function mpCleanup(){
+  clearTimeout(MP.joinTimer);
+  const peer = MP.peer;
+  MP.role = null; MP.peer = null; MP.hostConn = null; MP.conns = new Map(); MP.pend = new Map(); MP.players = []; MP.inMatch = false; MP.phase = "lobby";
+  try { peer && peer.destroy(); } catch(e){}
+  hideChatInput();
+  document.body.classList.remove("mpmode");
+  G.mode = "solo"; G.state = "title"; G.level = 0; G.player = null; loadLevel(); G.player = G.tanks.find(t => t.isPlayer);
+}
+function mpLeave(){ mpCleanup(); showOverlay("title"); }
+
+// ---------------------------------------------------------------- schermate
+function mpShowMessage(title, text){
+  overlay.hidden = false;
+  overlay.innerHTML = `<div class="card"><p class="eyebrow">Multigiocatore</p><h2>${esc(title)}</h2><p>${esc(text)}</p><button class="btn" id="mpBack">Torna al menu</button></div>`;
+  $("mpBack").addEventListener("click", e => { e.stopPropagation(); mpLeave(); });
+}
+function mpShowMenu(prefCode, err){
+  if (MP.role) mpCleanup();
+  G.state = "title";
+  overlay.hidden = false;
+  const mode = mpShowMenu.mode || "1v1", rounds = mpShowMenu.rounds || 3;
+  overlay.innerHTML = `<div class="card wide"><p class="eyebrow">Multigiocatore</p><h2>Sfida gli amici</h2>
+    <label class="fld">Il tuo nome<input id="mpName" maxlength="16" autocomplete="nickname" value="${esc(myName())}" placeholder="Comandante"></label>
+    <div class="cols">
+      <div class="col"><h3>Crea una stanza</h3>
+        <div class="opts" role="group" aria-label="Modalità">${Object.entries(MODES).map(([k,v]) => `<button class="opt" data-mode="${k}" aria-pressed="${mode===k}">${v.label}</button>`).join("")}</div>
+        <div class="opts" role="group" aria-label="Round da vincere">${[3,5].map(n => `<button class="opt" data-rounds="${n}" aria-pressed="${rounds===n}">Vince chi arriva a ${n}</button>`).join("")}</div>
+        <button class="btn" id="mpCreate">Crea stanza</button></div>
+      <div class="col"><h3>Entra in una stanza</h3>
+        <label class="fld">Codice della stanza<input id="mpCode" maxlength="5" autocomplete="off" spellcheck="false" value="${esc(prefCode || "")}" placeholder="ABCDE" style="text-transform:uppercase;letter-spacing:.2em"></label>
+        <button class="btn" id="mpJoin">Entra</button></div>
+    </div>
+    ${err ? `<p class="err">${esc(err)}</p>` : ""}
+    <button class="opt" id="mpBack" style="align-self:flex-start">Torna al gioco in solitaria</button></div>`;
+  const nameEl = $("mpName");
+  const takeName = () => { saveName(cleanName(nameEl.value)); };
+  overlay.querySelectorAll("[data-mode]").forEach(b => b.addEventListener("click", e => { e.stopPropagation(); takeName(); mpShowMenu.mode = b.dataset.mode; mpShowMenu($("mpCode").value); }));
+  overlay.querySelectorAll("[data-rounds]").forEach(b => b.addEventListener("click", e => { e.stopPropagation(); takeName(); mpShowMenu.rounds = +b.dataset.rounds; mpShowMenu($("mpCode").value); }));
+  const busy = text => { overlay.innerHTML = `<div class="card"><p class="eyebrow">Multigiocatore</p><h2>${esc(text)}</h2><p>Di solito bastano pochi secondi.</p></div>`; };
+  $("mpCreate").addEventListener("click", e => { e.stopPropagation(); audioInit(); takeName(); busy("Creo la stanza…");
+    mpHost(mode, rounds).then(() => mpRenderLobby(true)).catch(err => { mpCleanup(); mpShowMenu("", "Non riesco a creare la stanza (" + (err && err.type || "rete") + "). Controlla la connessione e riprova."); }); });
+  const join = () => { audioInit(); takeName(); const code = $("mpCode").value; busy("Entro nella stanza…");
+    mpJoin(code).catch(err => { const t = err && err.type; mpCleanup(); mpShowMenu(code,
+      t === "badcode" ? "Il codice ha 5 caratteri, per esempio K7MPQ." :
+      t === "peer-unavailable" ? "Nessuna stanza con questo codice. Controlla che l'host sia ancora collegato." :
+      t === "timeout" ? "L'host non risponde. Potrebbe esserci una rete che blocca il collegamento diretto: riprova o prova un'altra rete." :
+      "Collegamento non riuscito (" + (t || "rete") + ")."); }); };
+  $("mpJoin").addEventListener("click", e => { e.stopPropagation(); join(); });
+  $("mpCode").addEventListener("keydown", e => { if (e.key === "Enter"){ e.preventDefault(); join(); } });
+  $("mpBack").addEventListener("click", e => { e.stopPropagation(); takeName(); showOverlay("title"); });
+  nameEl.addEventListener("change", takeName);
+}
+function mpRenderLobby(force){
+  if (!MP.role || !MP.room) return;
+  if (G.mode === "mp" && G.state === "play"){ renderChatFeed(); return; }
+  if (G.state === "mpend" && force !== "user") return;
+  if (!$("lobbyPlayers") || force === true || force === "user"){
+    overlay.hidden = false;
+    const link = roomLink();
+    overlay.innerHTML = `<div class="card wide"><p class="eyebrow">Stanza · ${esc(MODES[MP.room.mode].label)} · vince chi arriva a ${MP.room.rounds}</p>
+      <div class="codebox"><span>Codice</span><b id="lobbyCode">${esc(MP.code)}</b><button class="opt" id="copyLink">Copia il link</button></div>
+      <p class="small" id="linkText" style="user-select:all;word-break:break-all">${esc(link)}</p>
+      <div class="cols"><div class="col"><h3>Giocatori</h3><ul class="plist" id="lobbyPlayers"></ul></div>
+      <div class="col"><h3>Chat</h3><div class="chatlog" id="lobbyChat" aria-live="polite"></div>
+        <input id="lobbyChatIn" maxlength="140" placeholder="Scrivi e premi Invio" autocomplete="off"></div></div>
+      <p class="small" id="lobbyHint"></p>
+      <div style="display:flex;flex-wrap:wrap;gap:8px">${MP.role === "host" ? `<button class="btn" id="mpStart">Inizia la partita</button>` : ""}<button class="btn dark" id="mpExit">Esci dalla stanza</button></div></div>`;
+    $("copyLink").addEventListener("click", e => { e.stopPropagation();
+      const done = () => { $("copyLink").textContent = "Link copiato"; };
+      try { navigator.clipboard.writeText(link).then(done, () => { const r = document.createRange(); r.selectNodeContents($("linkText")); getSelection().removeAllRanges(); getSelection().addRange(r); }); } catch(_){} });
+    $("mpExit").addEventListener("click", e => { e.stopPropagation(); mpLeave(); });
+    if (MP.role === "host") $("mpStart").addEventListener("click", e => { e.stopPropagation(); mpStartMatch(); });
+    $("lobbyChatIn").addEventListener("keydown", e => { e.stopPropagation(); if (e.key === "Enter"){ mpSay(e.target.value); e.target.value = ""; } });
+  }
+  const ul = $("lobbyPlayers");
+  ul.innerHTML = MP.players.map(p => { const col = playerColor(p);
+    return `<li><i style="background:${col.color};border-color:${col.dark}"></i><span>${esc(p.name)}${p.id === MP.myId ? " (tu)" : ""}${p.id === "host" ? " · host" : ""}</span>${
+      MP.room.mode === "2v2" ? `<em>${TEAM_INFO[p.team] ? TEAM_INFO[p.team].name : ""}</em>${MP.role === "host" ? `<button class="opt" data-swap="${esc(p.id)}">Cambia squadra</button>` : ""}` : ""}</li>`; }).join("")
+    + Array.from({ length:Math.max(0, MODES[MP.room.mode].max - MP.players.length) }, () => `<li class="empty"><i></i><span>Posto libero</span></li>`).join("");
+  ul.querySelectorAll("[data-swap]").forEach(b => b.addEventListener("click", e => { e.stopPropagation(); mpSwitchTeam(b.dataset.swap); }));
+  const log = $("lobbyChat");
+  log.innerHTML = MP.chat.map(m => m.system ? `<p class="sys">${esc(m.text)}</p>` : `<p><b>${esc(m.name)}:</b> ${esc(m.text)}</p>`).join("");
+  log.scrollTop = log.scrollHeight;
+  const hint = MP.role === "host" ? mpStartHint() : "Aspetta che l'host avvii la partita.";
+  $("lobbyHint").textContent = hint;
+  if ($("mpStart")) $("mpStart").disabled = !mpCanStart();
+}
+function mpShowEnd(d){
+  G.state = "mpend";
+  const lines = Object.entries(d.scores || {}).sort((a,b) => b[1]-a[1]).map(([k,v]) => `<li><span>${esc(teamLabel(k))}</span><b>${v}</b></li>`).join("");
+  overlay.hidden = false;
+  overlay.innerHTML = `<div class="card"><p class="eyebrow">Fine partita</p><h2>${d.abandoned ? "Partita interrotta" : esc((MP.room && MP.room.mode === "2v2" ? "Vincono i " : "Vince ") + teamLabel(d.winner))}</h2>
+    <ul class="plist score">${lines}</ul>
+    <div style="display:flex;flex-wrap:wrap;gap:8px"><button class="btn" id="mpToLobby">Torna alla stanza</button><button class="btn dark" id="mpExit2">Esci</button></div></div>`;
+  $("mpToLobby").addEventListener("click", e => { e.stopPropagation(); G.state = "mplobby"; mpRenderLobby("user"); });
+  $("mpExit2").addEventListener("click", e => { e.stopPropagation(); mpLeave(); });
+}
+
+// ---------------------------------------------------------------- chat in partita
+const chatIn = document.createElement("input");
+chatIn.id = "chatIn"; chatIn.maxLength = 140; chatIn.placeholder = "Messaggio (Invio per inviare, Esc per chiudere)"; chatIn.autocomplete = "off"; chatIn.hidden = true;
+document.querySelector(".stage").appendChild(chatIn);
+chatIn.addEventListener("keydown", e => {
+  e.stopPropagation();
+  if (e.key === "Enter"){ mpSay(chatIn.value); chatIn.value = ""; hideChatInput(); }
+  else if (e.key === "Escape") hideChatInput();
+});
+function showChatInput(){ for (const k in keys) keys[k] = false; chatIn.hidden = false; chatIn.focus(); }
+function hideChatInput(){ chatIn.hidden = true; chatIn.value = ""; if (G.mode === "mp") cv.focus(); }
+function renderChatFeed(){ /* i messaggi in partita sono disegnati sul campo da drawMpHud */ }
+addEventListener("keydown", e => {
+  if (G.mode === "mp" && G.state === "play" && e.key === "Enter" && chatIn.hidden && e.target.tagName !== "INPUT"){ e.preventDefault(); showChatInput(); }
+}, true);
+
+// ---------------------------------------------------------------- HUD multigiocatore (disegnato sul campo)
+function drawMpHud(c){
+  // nomi sotto i carri
+  c.font = "600 12px 'IBM Plex Mono', monospace"; c.textAlign = "center"; c.textBaseline = "top";
+  for (const t of G.tanks){
+    if (!t.alive) continue;
+    const w = c.measureText(t.name).width + 10;
+    c.fillStyle = "rgba(241,236,220,.75)"; rr(c, t.x - w/2, t.y + 22, w, 16, 8); c.fill();
+    c.fillStyle = t.T.dark; c.fillText(t.name, t.x, t.y + 24);
+  }
+  // punteggio
+  const keysS = Object.keys(MP.scores || {});
+  const parts = keysS.map(k => `${teamLabel(k)} ${MP.scores[k]}`);
+  const txt = parts.join("   ·   ") + `   ·   a ${MP.room ? MP.room.rounds : 3}`;
+  c.font = "600 15px 'IBM Plex Mono', monospace"; c.textBaseline = "top";
+  const w = c.measureText(txt).width + 24;
+  c.fillStyle = "rgba(241,236,220,.85)"; rr(c, W/2-w/2, 10, w, 26, 13); c.fill();
+  c.fillStyle = "#2b2621"; c.fillText(txt, W/2, 15);
+  // conto alla rovescia e annunci
+  c.textBaseline = "middle";
+  if (MP.phase === "count" && MP.roundT > 0){
+    c.font = "64px Bungee, Impact, sans-serif"; c.fillStyle = "rgba(43,38,33,.75)";
+    c.fillText(String(Math.ceil(MP.roundT)), W/2, H/2);
+    c.font = "600 16px 'IBM Plex Mono', monospace"; c.fillText(`Round ${MP.round+1} · ${MP_ARENAS[MP.round % MP_ARENAS.length].name}`, W/2, H/2 + 50);
+  } else if (MP.phase === "end" && MP.banner){
+    c.font = "40px Bungee, Impact, sans-serif"; const bw = c.measureText(MP.banner).width + 40;
+    c.fillStyle = "rgba(241,236,220,.9)"; rr(c, W/2-bw/2, H/2-34, bw, 68, 6); c.fill();
+    c.fillStyle = "#c2452a"; c.fillText(MP.banner, W/2, H/2+2);
+  }
+  // chat recente
+  const now = performance.now(), recent = MP.chat.filter(m => now - m.t < 9000).slice(-5);
+  c.font = "600 13px 'IBM Plex Mono', monospace"; c.textAlign = "left"; c.textBaseline = "bottom";
+  recent.forEach((m, i) => {
+    const line = m.system ? m.text : `${m.name}: ${m.text}`, y = H - 14 - (recent.length-1-i)*20;
+    const lw = c.measureText(line).width + 12;
+    c.fillStyle = "rgba(43,38,33,.6)"; rr(c, 10, y-17, lw, 19, 4); c.fill();
+    c.fillStyle = m.system ? "#f6d36b" : "#f1ecdc"; c.fillText(line, 16, y);
+  });
+  if (!recent.length && G.state === "play" && !touchMode){
+    c.fillStyle = "rgba(43,38,33,.45)"; c.fillText("Invio per scrivere in chat", 12, H - 12);
+  }
+  c.textAlign = "center";
+}
+
 // ---------------------------------------------------------------- avvio
 resize(); addEventListener("resize", resize);
 G.level = 0; loadLevel(); G.state = "title"; showOverlay("title");
+if (QS.get("stanza")) mpShowMenu(QS.get("stanza"));
 let last = performance.now();
 function frame(now){
   const dt = Math.min(1/30, (now-last)/1000); last = now;
   voiceTick(now);
   if (VOICE.flash > 0) VOICE.flash -= dt;
-  if (G.state !== "paused" && G.state !== "title") update(dt);
+  if (G.mode === "mp") mpFrame(dt);
+  else if (G.state !== "paused" && G.state !== "title") update(dt);
   render(now/1000);
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
-window.__G = G;
+window.__G = G; window.__MP = MP;
 })();
 </script>
 

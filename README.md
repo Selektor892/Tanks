@@ -11,3 +11,9 @@ Si gioca nel browser: https://selektor892.github.io/Tanks/
 - **Telefono senza sensori:** joystick a sinistra per muovere, joystick a destra per mirare (rilascia per sparare).
 
 Tutto il gioco è in `index.html`, senza dipendenze.
+
+## Multigiocatore
+
+Dal menu "Multigiocatore" chi crea la stanza fa da host e riceve un codice di 5 caratteri e un link da condividere. Modalità: 1 contro 1, 2 contro 2, tutti contro tutti fino a 4. Vince chi arriva per primo a 3 o 5 round. Invio apre la chat durante la partita.
+
+I giocatori si collegano direttamente tra loro (WebRTC) tramite [PeerJS](https://peerjs.com/), incluso in `peerjs.min.js` (licenza MIT, vedi `peerjs.LICENSE`). L'host deve tenere la scheda del gioco in primo piano: se la scheda va in background il browser rallenta la partita per tutti.
